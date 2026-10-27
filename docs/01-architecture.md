@@ -95,9 +95,6 @@ VPS (Hetzner Cloud, ~4 vCPU / 8 GB / 80 GB, Ubuntu 24.04)
 - **Frontend:** Cloudflare Pages builds `web/` on every push. PRs get preview URLs.
 - **Backups:** nightly `pg_dump` of every schema except `raw` goes to an offsite bucket (Hetzner Storage Box or Backblaze B2). `raw` is re-creatable from the collectors' Parquet archives.
 
-### What "Hetzner VPS" means
-
-A rented Linux virtual machine in Hetzner's data centre (Germany/Finland). We get root access, a public IPv4 and a fixed monthly price. It is a plain server, not a managed platform: we install Docker and run everything with compose. We chose it because it's cheap for an always-on database, simple, and transferable (the same compose file runs on AWS, Azure or a laptop).
 
 ## Networking & security
 
