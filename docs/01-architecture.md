@@ -5,48 +5,52 @@
 ```mermaid
 flowchart LR
   subgraph Home["Home (residential IPs)"]
-    C1["Collector A<br/>Dániel's PC"]
-    C2["Collector B<br/>Alek's PC"]
-    S1[("Spool<br/>gz JSON + Parquet")]
-    S2[("Spool")]
+    C1["Collector pc-daniel<br/>offset 0 s"]
+    C2["Collector pc-alek<br/>offset 45 s"]
+    S1[("Spool + Parquet archive")]
+    S2[("Spool + Parquet archive")]
     C1 --- S1
     C2 --- S2
   end
 
-  OS["OpenSky REST API"] -->|"/states/all<br/>every 90 s, offset 45 s"| C1
+  OS["OpenSky REST API"] -->|"/states/all every 90 s<br/>/flights/all daily"| C1
   OS --> C2
 
-  subgraph VPS["Hetzner VPS (docker compose)"]
-    CADDY["Caddy<br/>HTTPS reverse proxy"]
-    ING["ingest-api<br/>FastAPI"]
-    API["public-api<br/>FastAPI"]
+  CF["Cloudflare<br/>DNS · proxy · rate limits"]
+  C1 -->|"HTTPS POST batches"| CF
+  C2 --> CF
+
+  subgraph VM["Oracle Cloud VM (docker compose)"]
+    CADDY["Caddy"]
+    ING["ingest-api"]
+    API["public-api"]
     DB[("PostgreSQL 16<br/>TimescaleDB + PostGIS")]
-    ORCH["Dagster<br/>scheduled jobs"]
-    STREAM["stream-worker<br/>per-snapshot jobs"]
-    MLF["MLflow"]
+    ORCH["Dagster"]
+    STREAM["stream-worker"]
+    MLF["MLflow (private)"]
     GRAF["Grafana"]
   end
 
-  C1 -->|"HTTPS POST batches"| CADDY
-  C2 --> CADDY
+  CF --> CADDY
   CADDY --> ING --> DB
-  DB -- "NOTIFY new_snapshot" --> STREAM
+  CADDY --> API
+  CADDY --> GRAF
+  DB -- "NOTIFY new_snapshot / new_event" --> STREAM
   DB -- "NOTIFY" --> API
   STREAM --> DB
   ORCH --> DB
   ORCH --> MLF
   API --> DB
-  CADDY --> API
-  CADDY --> GRAF
-  CADDY --> MLF
   GRAF --> DB
 
-  WX["aviationweather.gov<br/>METAR"] --> ORCH
-  ZEN["Zenodo flight list<br/>Parquet + DuckDB"] --> ORCH
+  WX["aviationweather.gov"] --> ORCH
   LLM["Claude API"] <--> API
   LLM <--> ORCH
+  S1 -->|"daily"| R2[("Cloudflare R2<br/>archives + backups")]
+  S2 --> R2
+  ORCH -->|"backup"| R2
 
-  WEB["React + MapLibre + deck.gl<br/>Cloudflare Pages"] -->|"REST + SSE"| CADDY
+  WEB["React app<br/>Cloudflare Pages"] -->|"REST + SSE"| CF
   USER(("Visitor")) --> WEB
 ```
 
@@ -54,81 +58,102 @@ flowchart LR
 
 | Component | Runs on | Responsibility | Tech |
 |---|---|---|---|
-| **collector** | Home PCs (later the Pi) | Poll OpenSky on a fixed schedule, write every response to the local spool, upload to ingest-api, retry until confirmed | Python 3.12, httpx, Docker |
-| **ingest-api** | VPS | Authenticate collectors, validate, normalise, compute H3, insert idempotently, record batch metadata, `NOTIFY` | FastAPI, asyncpg |
-| **db** | VPS | System of record: raw snapshots, curated tables, aggregates, predictions | PostgreSQL 16 + TimescaleDB + PostGIS |
-| **stream-worker** | VPS | Jobs that must run on every new snapshot: event detection, ETA inference for inbound flights | Python, `LISTEN/NOTIFY` |
-| **orchestrator** | VPS | Scheduled batch assets: flights sessionizer, METAR, baselines, anomaly scoring, briefing, training, data-quality checks | Dagster (see [10 Roadmap](10-roadmap.md), open decision O2) |
-| **public-api** | VPS | Read API for the frontend, SSE live stream, chat endpoint | FastAPI |
-| **mlflow** | VPS | Experiment tracking + model registry | MLflow, Postgres backend, local artifact volume |
-| **grafana** | VPS | Ops + data-quality dashboards (public read-only) | Grafana, Postgres datasource |
-| **web** | Cloudflare Pages | Single-page app | React, TypeScript, Vite, MapLibre GL, deck.gl |
-| **caddy** | VPS | TLS (Let's Encrypt), routing by subdomain | Caddy 2 |
+| **collector** | Home PCs (Windows Task Scheduler); later a dedicated Linux device | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
+| **ingest-api** | VM | Authenticate collectors, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, asyncpg |
+| **db** | VM | System of record | PostgreSQL 16, TimescaleDB ≥ 2.19, PostGIS |
+| **stream-worker** | VM | Per-snapshot work on live snapshots: squawk and go-around events, ETA inference | Python, `LISTEN/NOTIFY` |
+| **orchestrator** | VM | Scheduled, windowed jobs ([04](04-pipelines.md#p4--orchestrated-jobs)) | Dagster (webserver, daemon, code location) |
+| **public-api** | VM | Read API, SSE stream, chat | FastAPI |
+| **mlflow** | VM | Experiment tracking and model registry; private | MLflow, Postgres backend, `mlflow-artifacts` volume |
+| **grafana** | VM | Ops, data-quality and model dashboards; shared publicly as externally shared dashboards | Grafana OSS |
+| **web** | Cloudflare Pages | Single-page app | React 19, TypeScript, Vite, MapLibre GL, deck.gl |
+| **caddy** | VM | TLS termination with the Cloudflare Origin CA certificate, routing by hostname | Caddy 2 |
 
 ## Why the collector runs at home
 
-OpenSky blocks or throttles many data-centre IP ranges. Collectors therefore run on residential connections and **push** to the server. The server never calls OpenSky.
+OpenSky blocks or throttles data-centre IPs. Collectors run on residential connections and **push** to the server; the server never calls OpenSky ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
 
-Two collectors with **two separate OpenSky accounts** (one per teammate) poll on the same 90 s grid, offset by 45 s:
-- When both run, the map refreshes every ~45 s.
-- When one PC is off, we still get a snapshot every 90 s, so the second machine is redundancy, not just extra speed.
+Two collectors with separate OpenSky accounts poll on the same 90 s grid, offset by 45 s. With both running the map refreshes about every 45 s; with one, every 90 s. Each collector computes its slots from its NTP-synced clock; there is no coordination protocol.
 
-No coordination protocol is needed. Each collector computes its slot from wall-clock time (NTP-synced), and the server stores whatever arrives.
+## Hosting
+
+Oracle Cloud Infrastructure **Always Free**, region `eu-frankfurt-1` ([ADR-0004](adr/0004-hosting-oracle-free-tier.md)):
+- `VM.Standard.A1.Flex`, 2 OCPU (Ampere ARM), 12 GB RAM, 200 GB block storage, Ubuntu 24.04 arm64.
+- The tenancy is upgraded to Pay As You Go with a budget alert at €1, so capacity requests succeed more often and the VM is not reclaimed as idle. Usage stays inside the free limits.
+- **Fallback:** if no A1 capacity is obtained by the end of week 1, use a Contabo Cloud VPS 10 (4 vCPU, 8 GB, 75 GB NVMe, amd64, about €5/month). Nothing else changes; images are multi-arch.
+
+```
+VM
+├── tailscale (host)        admin access; serves Dagster and MLflow to the tailnet only
+└── docker compose (infra/compose.yml)
+    ├── caddy               :443 → api.<domain>, ingest.<domain>, grafana.<domain>
+    ├── db                  no published port
+    ├── migrate             one-off: dbmate up
+    ├── ingest-api, public-api, stream-worker
+    ├── dagster-webserver   127.0.0.1:3000 → tailscale serve
+    ├── dagster-daemon, dagster-code
+    ├── mlflow              127.0.0.1:5000 → tailscale serve
+    └── grafana             anonymous access off; externally shared dashboards only
+```
 
 ## Deployment
 
-```
-VPS (Hetzner Cloud, ~4 vCPU / 8 GB / 80 GB, Ubuntu 24.04)
-└── docker compose (infra/compose.yml)
-    ├── caddy          :80/:443  → api.<domain>, ingest.<domain>, grafana.<domain>, mlflow.<domain>
-    ├── db             internal only (no public port)
-    ├── ingest-api     internal
-    ├── public-api     internal
-    ├── stream-worker  internal
-    ├── dagster-web, dagster-daemon  (UI behind basic auth)
-    ├── mlflow         (read-only public view behind Caddy, writes internal)
-    └── grafana        (anonymous viewer role enabled)
-```
+- **Images:** GitHub Actions builds every service for `linux/amd64` and `linux/arm64` with Buildx and pushes to GHCR (`ghcr.io/<org>/airspace-<service>`).
+- **Deploy** (on merge to `main`, `deploy.yml`):
+  1. The runner joins the tailnet with `tailscale/github-action` (ephemeral node, OAuth client from Actions secrets).
+  2. It SSHes to the VM's tailnet name and runs `infra/deploy.sh`.
+  3. `deploy.sh` runs `docker compose pull`, then `docker compose run --rm migrate`, then `docker compose up -d`.
+  - Migrations run **before** the new code starts, so every migration must work with the code that is still running (add columns and tables first, remove them in a later release).
+- **Frontend:** Cloudflare Pages builds `web/` on every push; PRs get preview URLs.
 
-- **Images** are built by GitHub Actions and pushed to GitHub Container Registry (GHCR).
-- **Deploys:** on merge to `main`, an Actions job SSHes to the VPS, runs `docker compose pull && docker compose up -d`, then runs DB migrations.
-- **Frontend:** Cloudflare Pages builds `web/` on every push. PRs get preview URLs.
-- **Backups:** nightly `pg_dump` of every schema except `raw` goes to an offsite bucket (Hetzner Storage Box or Backblaze B2). `raw` is re-creatable from the collectors' Parquet archives.
-
-
-## Networking & security
+## Networking and security
 
 | Concern | Decision |
 |---|---|
-| TLS | Caddy, automatic Let's Encrypt certificates |
-| Collector auth | One random API key per collector, sent as `Authorization: Bearer`, stored hashed (`ops.collectors`) |
-| DB exposure | No public port. Admins use an SSH tunnel |
-| DB roles | `ingest_writer`, `app_reader`, `llm_readonly`, `jobs`, `grafana_reader` (see [03](03-data-model.md#roles)) |
-| Public endpoints | Rate-limited per IP in Caddy; `/chat` additionally capped per day (cost guard) |
-| Secrets | `.env` on the VPS (not in git), GitHub Actions secrets for CI; `.env.example` documents every key |
-| Firewall | Hetzner Cloud firewall: 22 (our IPs only), 80, 443 |
+| DNS and edge | `<domain>` on Cloudflare. `api`, `ingest`, `grafana` are proxied records; SSL mode Full (strict) |
+| TLS at the origin | Caddy uses a Cloudflare Origin CA certificate (installed once, not in git) |
+| Firewall | OCI security list: TCP 443 inbound only from Cloudflare's published IP ranges. Port 22 is closed to the internet; SSH only over Tailscale |
+| Collector auth | One random key per collector, sent as `Authorization: Bearer`, stored only as an argon2id hash in `ops.collectors`. Created with `python -m ingest.admin add-collector`, which prints the key once |
+| DB exposure | No published port. Admin access: SSH over Tailscale, then `docker compose exec db psql` |
+| DB roles | Least privilege per service ([03](03-data-model.md#roles)) |
+| Rate limits | Cloudflare rate-limiting rule on `api.<domain>/api/v1/*`: 60 requests per 10 s per IP. Chat limits in public-api ([05](05-api-contract.md#post-chat)). Anthropic console spend limit $40/month |
+| Grafana | Anonymous access disabled. Public dashboards are *externally shared dashboards*, which run only their own saved queries. `grafana_reader` sees views without key hashes and has a 10 s statement timeout |
+| Dagster, MLflow | Not routed by Caddy; reachable only on the tailnet |
+| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: Tailscale OAuth client, deploy SSH key, GHCR token, Anthropic key for the eval. Each collector's `.env`: its OpenSky client, ingest key and R2 credentials |
 
-## Sizing & cost (Level 1)
+## Backups
 
-| Item | Monthly |
+Daily `backup` job ([04](04-pipelines.md#backup)) to Cloudflare R2 `airspace-backup/`, 14 days kept:
+- `airspace` without the raw hypertables' chunk data (raw data is restored from the archives),
+- `dagster` and `mlflow`,
+- the `mlflow-artifacts` volume.
+
+The collectors copy their Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of a home PC.
+
+## Sizing
+
+| Item | Estimate | Basis |
+|---|---|---|
+| State vectors | ~19M rows/day | 2 collectors × 960 snapshots × ~10k aircraft |
+| Raw size | ~5 GB/day uncompressed, ~0.5 GB/day compressed | ~250–300 bytes/row with 2 indexes; ~10× compression |
+| Raw at 90 days | ~50–60 GB | 2 uncompressed days + 88 compressed days |
+| Everything else | < 15 GB | predictions with retention, flight lists, aggregates |
+| RAM | ~8 GB steady, ~10 GB during training | Postgres 4 GB, Dagster 1.5 GB, MLflow 0.5 GB, Grafana 0.3 GB, services 1.5 GB |
+
+These are estimates. M0 measures real row counts and Parquet sizes from the spool; update this table with the measured values.
+
+## Cost (Level 1, per month, excl. VAT)
+
+| Item | Cost |
 |---|---|
-| Hetzner Cloud VPS, 4 vCPU / 8 GB (CX32-class) | ~€7–10 |
-| Offsite backup (Storage Box / B2) | ~€1–4 |
-| Claude API (Haiku for briefing + chat, with caps) | a few € |
-| Domain | ~€1 (≈ €10–15/yr) |
-| Cloudflare Pages, GitHub, GHCR, Grafana, MLflow | €0 |
-| **Total** | **~€10–20** |
+| Oracle VM | €0 (fallback Contabo: ~€5) |
+| Cloudflare R2 (archives ~40 GB + backups) | €0–2 |
+| Claude API (Haiku; briefing ~$1.50, chat ~$0.005/question, capped) | $2–8 typical, ≤ $40 hard limit |
+| Domain | ~€1 |
+| Cloudflare DNS/Pages, GitHub, GHCR, Tailscale | €0 |
+| Electricity for two home PCs (estimate, 50–100 W each) | €8–50; < €2 on a dedicated low-power device |
+| **Total** | **€5–15 plus electricity** |
 
-Check current prices when ordering. Storage estimate: ~10M state vectors/day, about 1 GB/day uncompressed, around 100 MB/day after Timescale compression. 90 days of raw data therefore fits comfortably on 80 GB.
+## Later: Level 2 (out of scope)
 
-## Level 2 delta
-
-```mermaid
-flowchart LR
-  ANT["1090 MHz antenna"] --> SDR["RTL-SDR"] --> PI["Raspberry Pi<br/>readsb"]
-  PI -->|"feeder"| OSN["OpenSky (+ credits)"]
-  PI -->|"1 Hz local states"| COL["collector source: local_adsb"]
-  COL --> ING["ingest-api (unchanged contract)"]
-```
-
-The local source writes the same state-vector shape with `source = 'local_adsb'`. The only new pieces are a higher-frequency path in the API/SSE stream for the receiver's region and a dedupe rule that prefers local positions over OpenSky positions for the same `icao24` and second.
+Our own ADS-B receiver is not part of the build. [ADR-0002](adr/0002-source-agnostic-ingestion.md) records what it would need.

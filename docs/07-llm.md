@@ -1,14 +1,14 @@
 # 07 · LLM layer
 
-Provider: Anthropic Claude API via the official Python SDK.
-- Default model: **Claude Haiku** (`claude-haiku-5-5`), cheap and fast.
-- Stronger model for SQL: **Claude Sonnet** (`claude-sonnet-5-5`), only if the eval shows Haiku isn't accurate enough.
-- Model ids live in config, not code.
-- Prompts are versioned files in `services/llm/prompts/` (`briefing_v3.md`), and the version is stored with every output.
+Provider: Anthropic Claude API via the official Python SDK, client in `services/llm`.
+- Model: **Claude Haiku 5.5** (`claude-haiku-5-5`) for both features. Model ids live in config (`LLM_MODEL_BRIEFING`, `LLM_MODEL_CHAT`), not code.
+- Switching the chat to Claude Sonnet 5.5 (`claude-sonnet-5-5`) is allowed only if the CI eval with Haiku stays below 80%, and only after the daily chat cap is re-sized (Sonnet costs about 20× more per question).
+- Prompts are versioned files in `services/llm/prompts/` (e.g. `briefing_v3.md`); the version is stored with every output.
+- Spend control: per-IP and global chat caps ([05](05-api-contract.md#post-chat)) and an Anthropic console spend limit of $40/month.
 
 ## 1 · Airspace briefing
 
-**Cadence:** every 30 min (orchestrator job `llm_briefing`).
+**Cadence:** every 30 min (`llm_briefing`, window = the 30 min that just ended).
 
 **Principle:** the model writes prose; it never invents numbers. All facts are computed in SQL first:
 
@@ -16,20 +16,31 @@ Provider: Anthropic Claude API via the official Python SDK.
 {
   "window": "2026-11-03T14:00Z/14:30Z",
   "aircraft_now": 9412, "vs_typical_pct": -4.1,
-  "top_anomalies": [{"area":"S Germany (near EDDM)","direction":"high","z":3.8}],
+  "top_anomalies": [{"area":"near Munich (EDDM), Germany","direction":"high","z":3.8,"persistent":true}],
   "events": [{"kind":"go_around","airport":"LOWW","callsign":"AUA478","ts":"14:12Z"}],
-  "weather": {"LOWW":"IFR, wind 300/22G35", "LHBP":"VFR", "LZIB":"MVFR"},
+  "weather": {"LOWW":"IFR, wind 300° 11 m/s gusting 18 m/s", "LHBP":"VFR", "LZIB":"MVFR"},
   "arrivals_next_hour": {"LOWW": 31, "LZIB": 3, "LHBP": 14},
   "data_quality": "pass"
 }
 ```
 
-**Prompt rules:**
-- 120–200 words in Markdown: one headline sentence, then bullets for Central Europe, anomalies, notable events, and weather impact.
-- Use only the numbers in the facts JSON.
-- Name places in a human way (a reverse lookup of H3 cell → nearest large airport/city is part of the facts).
+- `vs_typical_pct`: airborne aircraft now vs the median for this hour of week over the last 28 days.
+- `top_anomalies`: up to 3 clusters from the window's `anomaly_start` events, largest `|z|` first. Place names: nearest `large_airport` to the anchor cell centre, plus the country from `ref.h3_r4_country`.
+- `arrivals_next_hour`: flights whose latest `eta_p50` falls in the next 60 min.
 
-**Stored in:** `llm.briefings`, together with the facts JSON, so every claim can be checked afterwards.
+**Prompt rules:**
+- 120–200 words of Markdown: one headline sentence, then bullets for Central Europe, unusual traffic, notable events, and weather at the three airports.
+- Use only numbers from the facts JSON. Do not compute new ones.
+- State weather as conditions; never claim that weather caused traffic changes or events.
+- A `low` anomaly is described as "lower than usual (possibly a receiver coverage gap)".
+
+**Number check** (stored as `llm.briefings.number_check`):
+1. Extract every number from the output, ignoring tokens that contain letters (e.g. `AUA478`, `FL100`) and times in `HH:MM` or `HH:MMZ` form that appear in the facts.
+2. Normalise: remove thousands separators, `%` and `+`.
+3. Each number must equal a number from the facts JSON, either exactly or after rounding that fact to 0 or 1 decimal places.
+4. Any unmatched number → `fail`. A failed briefing is stored but never served; the previous passing one stays visible.
+
+**Stored in:** `llm.briefings`, with the facts JSON, so every claim can be checked afterwards.
 
 ## 2 · Chat: text-to-SQL
 
@@ -40,34 +51,43 @@ sequenceDiagram
   participant C as Claude
   participant D as Postgres (llm_readonly)
   U->>A: POST /chat {question}
+  A->>A: limits: length, per-IP, daily cap
   A->>C: system prompt + view catalogue (cached) + question, tool run_sql
   C->>A: tool_use run_sql(sql)
-  A->>A: guard: parse with sqlglot, single SELECT, only llm.v_* views, add LIMIT 200
-  A->>D: execute (5 s timeout, read-only role)
+  A->>A: guard (below)
+  A->>D: BEGIN READ ONLY; SET LOCAL statement_timeout = '5s'; wrapped query; COMMIT
   D-->>A: rows
-  A->>C: tool_result (rows, truncated)
+  A->>C: tool_result (rows, max 50 shown to the model)
   C-->>A: answer (Markdown)
-  A-->>U: answer_md + sql + rows
+  A-->>U: answer_md + sql + rows (max 200)
 ```
 
-**Guardrails (defence in depth):**
-1. The DB role `llm_readonly` can only `SELECT` from `llm.v_*` views. Read-only transactions, 5 s statement timeout.
-2. A SQL parser check (sqlglot):
-   - exactly one statement, of type `SELECT`,
-   - every referenced relation is in the allow-list,
-   - no functions on the deny-list (`pg_sleep`, `dblink`, file access functions).
-3. `LIMIT 200` is enforced by wrapping the query.
-4. At most 3 tool calls per question; 500-character question limit; per-IP and global daily caps (cost guard).
-5. The generated SQL is always shown in the UI. This is transparency for users and something interviewers like to see.
+### Guardrails
 
-**Prompt:** the system prompt contains `db/llm_views.md` (a data dictionary: views, columns, units, example values, 10 example question→SQL pairs). It is marked for prompt caching because it is identical on every request.
+1. **Role:** `llm_readonly` can only `SELECT` from `llm.v_*`; `default_transaction_read_only = on`.
+2. **Per transaction:** every query runs in its own `BEGIN READ ONLY` transaction that starts with `SET LOCAL statement_timeout = '5s'`, so nothing a query does can outlive it.
+3. **Parser check (sqlglot, Postgres dialect):**
+   - exactly one statement, and it is a `SELECT` (CTEs allowed);
+   - every relation is an `llm.v_*` view;
+   - every function call is on the allow-list: `count, sum, avg, min, max, round, abs, ceil, floor, coalesce, nullif, greatest, least, lower, upper, length, trim, concat, date_trunc, date_part, extract, now, to_char, percentile_cont, row_number, rank, dense_rank, lag, lead`. Anything else (including `set_config`, `pg_sleep`, `dblink`, file and admin functions) is rejected;
+   - no `INTO`, no locking clauses (`FOR UPDATE` etc.).
+4. **Row cap:** the query is wrapped as `SELECT * FROM (<query>) AS q LIMIT 200`.
+5. **Loop cap:** at most 3 tool calls per question.
+6. **Transparency:** the generated SQL is always shown in the UI.
 
-## 3 · Evaluation (runs in CI)
+A rejected query is returned to the model as a tool error with the reason, counting towards the 3 calls.
 
-- `services/llm/eval/golden.yaml` has 30+ questions, each with either a reference SQL or an expected-answer check. Examples:
+**Prompt:** the system prompt contains `db/llm_views.md`: every view, column, unit, example values, and 10 example question → SQL pairs. It is marked for prompt caching.
+
+**What the chat can answer:** live traffic by country (`over_country`), airline (`airline_name`), airport arrivals and ETAs, events, weather, and hourly traffic history. Questions outside the views get a plain "I can't answer that from this data".
+
+## 3 · Evaluation (CI)
+
+- `services/llm/eval/golden.yaml`: 30+ questions, each with a reference SQL or an expected-answer check. Examples:
   - "How many aircraft are airborne over Austria right now?"
   - "Busiest hour at LHBP yesterday?"
   - "Any emergency squawks today?"
-- A CI job runs them against a fixture database (a small dump) and scores **execution accuracy** (the result set matches the reference SQL's result). It fails the build below 80%.
-- Briefing eval: an automated check that every number in the output appears in the facts JSON (regex extract + compare). No hallucinated numbers allowed.
-- Results are logged to MLflow experiment `llm-eval`, so prompt and model changes have a tracked history.
+- `llm-eval.yml` runs them against the fixture database (`db/seeds/fixture/`) and scores **execution accuracy** (the result set matches the reference SQL's result). The build fails below 80%.
+- Runs when any of these change: `services/llm/**`, `db/llm_views.md`, `db/migrations/**`, `db/seeds/fixture/**`.
+- Briefing eval: the number check above runs on 10 fixture facts files; any `fail` fails the build.
+- Results are uploaded as a GitHub Actions artifact (`llm-eval.json`) and summarised in the job summary. CI does not write to MLflow.
