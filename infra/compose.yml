@@ -1,0 +1,49 @@
+# Full server stack (docs/01-architecture.md). Services are added here as each milestone builds them.
+# Secrets come from infra/.env (git-ignored); see .env.example.
+name: airspace
+
+services:
+  db:
+    # Exact tag: needs TimescaleDB >= 2.19 (timescale/timescaledb#7672). amd64 + arm64, includes PostGIS.
+    image: timescale/timescaledb-ha:pg16.15-ts2.30.2
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      AIRSPACE_OWNER_PASSWORD: ${AIRSPACE_OWNER_PASSWORD:?}
+      INGEST_WRITER_PASSWORD: ${INGEST_WRITER_PASSWORD:?}
+      STREAM_WORKER_PASSWORD: ${STREAM_WORKER_PASSWORD:?}
+      JOBS_PASSWORD: ${JOBS_PASSWORD:?}
+      APP_READER_PASSWORD: ${APP_READER_PASSWORD:?}
+      LLM_READONLY_PASSWORD: ${LLM_READONLY_PASSWORD:?}
+      GRAFANA_READER_PASSWORD: ${GRAFANA_READER_PASSWORD:?}
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:?}
+      MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?}
+      TS_TUNE_MEMORY: 4GB
+      TS_TUNE_NUM_CPUS: "2"
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - db-data:/home/postgres/pgdata
+      - ./db/10-airspace.sh:/docker-entrypoint-initdb.d/10-airspace.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "psql -U postgres -d airspace -c 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  migrate:
+    image: ghcr.io/amacneil/dbmate:2.37.0
+    profiles: [tools]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://airspace_owner:${AIRSPACE_OWNER_PASSWORD:?}@db:5432/airspace?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_NO_DUMP_SCHEMA: "true"
+    volumes:
+      - ../db:/db:ro
+    command: up
+
+volumes:
+  db-data:

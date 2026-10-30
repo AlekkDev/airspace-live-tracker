@@ -62,9 +62,9 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 |---|---|---|---|---|
 | M1.1 | VM: Ubuntu 24.04, Docker, Tailscale; OCI security list (22 closed; 443 from Cloudflare only added with M1.2) | A | ✅ | Done 2026-10-30. Public port 22 closed and checked; login over Tailscale works; VM key expiry disabled |
 | M1.2 | Cloudflare DNS (`api`, `ingest`, `grafana` proxied, Full strict), Origin CA certificate, Caddy | A | ⬜ | Moved to before a public launch (D3). Needs M0.6 |
-| M1.3 | `infra/compose.yml` and `compose.dev.yml`; pinned `timescaledb-ha` image (TimescaleDB ≥ 2.19) | A | ⬜ | |
-| M1.4 | Migrations: schemas, roles, `ops`, `raw` (no compression policy), `ref`, `core`, `agg`, `ml`, `llm` ([03](03-data-model.md)) | A | ⬜ | |
-| M1.5 | CI migration test, including the compressed-chunk `ON CONFLICT` test (timescaledb#7672) | A | ⬜ | |
+| M1.3 | `infra/compose.yml` and `compose.dev.yml`; pinned `timescaledb-ha` image (TimescaleDB ≥ 2.19) | A | ✅ | `pg16.15-ts2.30.2`. Database running on the VM since 2026-10-30; files copied by hand until M1.15 |
+| M1.4 | Migrations: schemas, roles, `ops`, `raw` (no compression policy), `ref`, `core`, `agg`, `ml`, `llm` ([03](03-data-model.md)) | A | ✅ | `agg.traffic_h3_15m` and `agg.coverage_15m` come with M1.10; `llm.v_*` with the chat. Open for M2: `stream_worker` has no INSERT on `ops.stream_state`, so its first row needs a decision |
+| M1.5 | CI migration test, including the compressed-chunk `ON CONFLICT` test (timescaledb#7672) | A | 🟡 | `infra/test-db.sh` and `db/tests/test_schema.sql` pass on the VM; CI wiring comes with M1.14 |
 | M1.6 | ingest-api `POST /ingest/v1/batches` ([05](05-api-contract.md#post-ingestv1batches)) | A | ⬜ | |
 | M1.7 | Admin CLI `add-collector` (argon2id key hash) | A | ⬜ | |
 | M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ⬜ | v0 logs a warning if upload is enabled |
