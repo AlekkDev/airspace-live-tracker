@@ -1,0 +1,249 @@
+\documentclass[10.5pt]{article}
+\input{common}
+
+% Summary-specific header/footer
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\color{papermuted}Airspace Monitor · Project summary}
+\fancyhead[R]{\footnotesize\color{papermuted}2026}
+\fancyfoot[L]{\footnotesize\color{papermuted}Data: The OpenSky Network · non-commercial use}
+\fancyfoot[R]{\footnotesize\color{papermuted}\thepage\ / 2}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+\newtcolorbox{darkcard}[1][]{enhanced,colback=panel,colframe=border,coltext=textlight,boxrule=0.6pt,arc=2.2mm,left=3.3mm,right=3.3mm,top=2.6mm,bottom=2.6mm,#1}
+
+\begin{document}
+\hypersetup{pdftitle={Airspace Monitor - Project Summary},pdfauthor={Alek Hanusic and Daniel Csorba},pdfsubject={A plain-language summary of the Airspace Monitor project}}
+
+% ============================================================
+% PAGE 1 — WHAT IT IS
+% ============================================================
+\pagecolor{ink}
+\color{textlight}
+\thispagestyle{empty}
+
+\begin{tikzpicture}[remember picture,overlay]
+  \foreach \x in {0,...,14} {
+    \draw[white,opacity=0.035,line width=0.4pt]
+      ($(current page.south west)+(\x*1.55cm,0)$) -- ++(0,29.7cm);
+  }
+  \foreach \y in {0,...,19} {
+    \draw[white,opacity=0.035,line width=0.4pt]
+      ($(current page.south west)+(0,\y*1.55cm)$) -- ++(21cm,0);
+  }
+  \draw[accent,opacity=0.30,line width=0.8pt]
+    ($(current page.north east)+(-4.6cm,-3.2cm)$) arc[start angle=205,end angle=515,radius=2.0cm];
+  \draw[accent,opacity=0.14,line width=0.8pt]
+    ($(current page.north east)+(-4.6cm,-3.2cm)$) arc[start angle=205,end angle=515,radius=2.8cm];
+  \node[circle,draw=accent,fill=accent!12,minimum size=1.0cm,line width=0.8pt]
+    at ($(current page.north east)+(-4.6cm,-3.2cm)$) {\color{accent}\large\faPlane};
+\end{tikzpicture}
+
+\vspace*{1.35cm}
+{\color{accent}\fontsize{9}{11}\selectfont\bfseries MSc CLOUD \& AI PROJECT \quad·\quad 2026}
+
+\vspace{0.35cm}
+{\fontsize{42}{46}\selectfont\bfseries Airspace Monitor}
+
+\vspace{0.10cm}
+{\color{textlight}\fontsize{20}{25}\selectfont See the sky. Understand the traffic. Ask the airspace.}
+
+\vspace{0.55cm}
+{\color{muted}\fontsize{11.2}{15.5}\selectfont
+Airspace Monitor is a live map of the aircraft visible to the OpenSky volunteer network. It turns free, crowdsourced flight data into a real-time picture of the sky — and adds predictions and an AI assistant on top.\par}
+
+\vspace{0.55cm}
+\begin{minipage}[t]{0.485\linewidth}
+\begin{darkcard}
+{\color{accent}\Large\faPlane}\quad{\bfseries Live map}
+
+\vspace{2pt}
+{\small 10,000+ aircraft move smoothly between updates, coloured by altitude. Click one to see its flight, route and predicted arrival.}
+\end{darkcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.485\linewidth}
+\begin{darkcard}
+{\color{violet}\Large\faLayerGroup}\quad{\bfseries Unusual traffic}
+
+\vspace{2pt}
+{\small Hexagonal map cells show where traffic is busier or quieter than usual for that hour of the week — with an honest caveat when coverage may be the cause.}
+\end{darkcard}
+\end{minipage}
+
+\vspace{4pt}
+\begin{minipage}[t]{0.485\linewidth}
+\begin{darkcard}
+{\color{accent}\Large\faClock}\quad{\bfseries Arrival board}
+
+\vspace{2pt}
+{\small Predicted landing times, shown as a range, for flights inbound to Vienna, Bratislava and Budapest.}
+\end{darkcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.485\linewidth}
+\begin{darkcard}
+{\color{violet}\Large\faComments}\quad{\bfseries Ask the sky}
+
+\vspace{2pt}
+{\small A plain-English chat that queries the database and shows the SQL behind each answer, plus a short AI briefing every 30 minutes.}
+\end{darkcard}
+\end{minipage}
+
+\vspace{8pt}
+\begin{center}
+\begin{tabular}{@{}p{3.4cm} p{3.4cm} p{3.4cm} p{3.4cm}@{}}
+{\color{accent}\fontsize{20}{23}\selectfont\bfseries 10k+} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 45--90 s} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 3} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 30 min} \\
+{\color{muted}\scriptsize aircraft in one snapshot} & {\color{muted}\scriptsize refresh between updates} & {\color{muted}\scriptsize target airports} & {\color{muted}\scriptsize AI briefing cadence} \\
+\end{tabular}
+\end{center}
+
+\vspace{10pt}
+{\color{accent}\fontsize{8.5}{10}\selectfont\bfseries WHY IT IS INTERESTING}
+
+\vspace{3pt}
+\begin{minipage}[t]{0.32\linewidth}
+\begin{darkcard}[colframe=accent]
+{\bfseries Real data engineering}
+
+\vspace{2pt}
+{\footnotesize Two collectors spool every response before upload. Ingest is idempotent, raw data is archived to R2, and the restore path is documented.}
+\end{darkcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\begin{darkcard}[colframe=accent]
+{\bfseries Honest ML}
+
+\vspace{2pt}
+{\footnotesize Arrival times are judged against two baselines and returned as a range. Unusual traffic is evaluated with synthetic anomalies because there is no ground truth.}
+\end{darkcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\begin{darkcard}[colframe=accent]
+{\bfseries Guarded AI}
+
+\vspace{2pt}
+{\footnotesize The chat runs read-only SQL against curated views, shows the query, and is tested against a 30-question golden set with an 80\% target.}
+\end{darkcard}
+\end{minipage}
+
+\vspace{4pt}
+{\color{muted}\fontsize{9}{12}\selectfont\itshape
+A map you can look at, a platform you can inspect, and predictions you can question.}
+
+\vfill
+{\color{muted}\fontsize{8.5}{11}\selectfont
+Free, non-commercial data. The OpenSky attribution is always visible in the app.\\
+Built by Alek Hanušić \& Dániel Csorba.\par
+\vspace{2pt}
+{\color{accent}\rule{1.1cm}{0.9pt}}\quad
+\textbf{A live map with a data platform, predictions and a guarded AI assistant underneath.}
+}
+
+\newpage
+\pagecolor{paper}
+\color{papertext}
+
+% ============================================================
+% PAGE 2 — HOW IT WORKS
+% ============================================================
+\sechead{How it works}
+
+{\small
+Four steps, all built as one system:
+}
+
+\vspace{2pt}
+\begin{minipage}[t]{0.235\linewidth}
+\begin{card}
+{\color{accent}\bfseries 1 · Collect}
+
+\vspace{2pt}
+{\footnotesize Two home PCs ask OpenSky for every visible aircraft every 90 seconds, taking turns. Each response is saved locally first, so a network or server outage only delays data; it does not lose it.}
+\end{card}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.235\linewidth}
+\begin{card}
+{\color{accent}\bfseries 2 · Store}
+
+\vspace{2pt}
+{\footnotesize The cloud server stores positions in PostgreSQL with TimescaleDB and PostGIS. Older raw data is archived to Cloudflare R2 and read with DuckDB when needed.}
+\end{card}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.235\linewidth}
+\begin{card}
+{\color{accent}\bfseries 3 · Understand}
+
+\vspace{2pt}
+{\footnotesize Scheduled jobs build flights, detect squawks and go-arounds, score unusual traffic, look up likely destinations and predict arrival times with a LightGBM model.}
+\end{card}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.235\linewidth}
+\begin{card}
+{\color{accent}\bfseries 4 · Show}
+
+\vspace{2pt}
+{\footnotesize A React map streams new snapshots over SSE. The AI briefing and chat read curated database views; the chat can only run read-only SQL and always shows the query.}
+\end{card}
+\end{minipage}
+
+\vspace{5pt}
+\sechead{What is inside}
+
+\begin{minipage}[t]{0.32\linewidth}
+\begin{softcard}
+{\bfseries Data platform}
+
+\vspace{2pt}
+{\footnotesize Python, FastAPI, PostgreSQL 16 + TimescaleDB + PostGIS, Dagster, Grafana, Cloudflare R2. Idempotent ingest, spool-first collectors, data-quality checks and a documented restore path.}
+\end{softcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\begin{softcard}
+{\bfseries Machine learning}
+
+\vspace{2pt}
+{\footnotesize A statistical unusual-traffic baseline, a LightGBM arrival-time model with p10/p50/p90 outputs, and a deterministic route lookup. Every model is compared with a simple baseline and has a public model card.}
+\end{softcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\begin{softcard}
+{\bfseries AI layer}
+
+\vspace{2pt}
+{\footnotesize Claude Haiku 5.5 writes the briefing from a facts JSON and answers chat questions through a guarded text-to-SQL path: read-only role, 5 s timeout, allow-listed views and functions, 3 tool calls, 200 rows, SQL shown.}
+\end{softcard}
+\end{minipage}
+
+\vspace{4pt}
+\begin{minipage}[t]{0.55\linewidth}
+\begin{warncard}
+{\bfseries What it cannot do (and says so)}
+\begin{itemize}[leftmargin=1.0em,itemsep=1.5pt,topsep=2pt]
+  \item It only sees aircraft heard by OpenSky's volunteer receivers. A receiver outage can look like a traffic drop; low-traffic cells carry a coverage caveat.
+  \item There are no airline schedules or air-traffic-control data. Arrival times are ranges, and far-out estimates are wider.
+  \item Destinations are estimates, not broadcast data. Diversions can appear late.
+  \item It is not a commercial product, a mobile app or a user-account service.
+\end{itemize}
+\end{warncard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.42\linewidth}
+\begin{accentcard}
+{\bfseries Status}
+
+\vspace{2pt}
+{\small Week 0 of 8. The plan and technical documents are finished; collection starts first so the models have history.}
+
+\vspace{2pt}
+{\small \textbf{Core:} live map, unusual-traffic heatmap, event feed, arrival board, destination estimate, AI briefing and chat, public dashboards.}
+
+\vspace{2pt}
+{\small \textbf{Stretch, only if time:} a smarter destination model, a smarter anomaly model, holding-pattern events, self-hosted map tiles.}
+\end{accentcard}
+\end{minipage}
+
+\vspace{4pt}
+{\footnotesize\color{papermuted}
+\textbf{Data and credits:} The OpenSky Network (live states and flight lists), Zenodo OpenSky COVID-19 flight dataset, OurAirports, OpenFlights, Natural Earth, aviationweather.gov and the Iowa Environmental Mesonet. Basemap © CARTO © OpenStreetMap contributors. OpenSky data is used for non-commercial research and education; attribution is always visible.
+}
+
+\end{document}

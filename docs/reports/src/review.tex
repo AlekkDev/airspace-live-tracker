@@ -1,0 +1,527 @@
+\documentclass[10.5pt]{article}
+\input{common}
+
+\begin{document}
+\hypersetup{pdftitle={Airspace Monitor - Documentation Review},pdfauthor={Alek Hanusic},pdfsubject={Feasibility review of the Level 1 documentation}}
+
+% ============================================================
+% COVER
+% ============================================================
+\pagecolor{ink}
+\color{textlight}
+\thispagestyle{empty}
+
+\begin{tikzpicture}[remember picture,overlay]
+  % subtle grid
+  \foreach \x in {0,...,14} {
+    \draw[white,opacity=0.035,line width=0.4pt]
+      ($(current page.south west)+(\x*1.55cm,0)$) -- ++(0,29.7cm);
+  }
+  \foreach \y in {0,...,19} {
+    \draw[white,opacity=0.035,line width=0.4pt]
+      ($(current page.south west)+(0,\y*1.55cm)$) -- ++(21cm,0);
+  }
+  % accent orbit
+  \draw[accent,opacity=0.35,line width=0.8pt]
+    ($(current page.north east)+(-5.2cm,-4.0cm)$) arc[start angle=205,end angle=515,radius=2.35cm];
+  \draw[accent,opacity=0.16,line width=0.8pt]
+    ($(current page.north east)+(-5.2cm,-4.0cm)$) arc[start angle=205,end angle=515,radius=3.15cm];
+  \fill[accent] ($(current page.north east)+(-3.0cm,-5.4cm)$) circle (2.0pt);
+  \fill[violet] ($(current page.north east)+(-3.85cm,-2.55cm)$) circle (1.6pt);
+  \node[circle,draw=accent,fill=accent!12,minimum size=1.15cm,line width=0.8pt]
+    at ($(current page.north east)+(-5.2cm,-4.0cm)$) {\color{accent}\Large\faPlane};
+  % bottom accent rule
+  \draw[accent,opacity=0.8,line width=1.2pt]
+    ($(current page.south west)+(1.9cm,2.0cm)$) -- ++(5.2cm,0);
+\end{tikzpicture}
+
+\vspace*{2.2cm}
+{\color{accent}\fontsize{9}{11}\selectfont\bfseries DOCUMENTATION REVIEW \quad·\quad LEVEL 1 \quad·\quad 30 OCTOBER 2026}
+
+\vspace{0.55cm}
+{\fontsize{40}{44}\selectfont\bfseries Airspace Monitor}
+
+\vspace{0.18cm}
+{\fontsize{20}{25}\selectfont Feasibility, risks and the changes\\ I would make before M1}
+
+\vspace{0.9cm}
+{\color{muted}\fontsize{11.5}{16}\selectfont
+A review of the 11 system documents, four ADRs, the README and the original intent PDF.\par}
+
+\vspace{0.35cm}
+{\color{muted}\fontsize{11.5}{16}\selectfont
+Prepared for Alek Hanušić \& Dániel Csorba.\par}
+
+\vfill
+{\color{muted}\fontsize{9}{12}\selectfont
+No source documents were modified. External facts were checked on 30 October 2026.\par
+\vspace{2pt}
+{\color{accent}\rule{1.2cm}{1pt}}\quad
+\textbf{Status:} buildable; public launch is conditional on the OpenSky gate.
+}
+
+\newpage
+\pagecolor{paper}
+\color{papertext}
+
+% ============================================================
+% EXECUTIVE VERDICT
+% ============================================================
+\sechead{Executive verdict}
+
+\begin{warncard}
+{\large\bfseries Buildable. Shippable as a public demo only after one licensing gate is cleared.}
+
+\vspace{3pt}
+The architecture, data model, pipelines, ML plan and LLM guardrails are strong enough to start building now. The remaining risk is not the technology. It is \textbf{permission} (OpenSky's terms for public display and for two accounts), one \textbf{factual data error} (the Zenodo record), and the \textbf{calendar} (8 weeks for a platform plus three ML products plus an LLM product).
+\end{warncard}
+
+\vspace{5pt}
+\begin{tabularx}{\linewidth}{@{}l c c X@{}}
+\toprule
+\textbf{Area} & \textbf{Rating} & \textbf{Score} & \textbf{Assessment} \\
+\midrule
+Architecture \& hosting & \dotok & 9/10 & Oracle Always Free with a Contabo fallback; multi-arch images; Tailscale/Cloudflare access is realistic. Capacity is the only wildcard. \\
+Data model \& pipelines & \dotok & 9/10 & Natural keys, dedupe keys, SI units, explicit job windows, CAGG and retention are well thought through. A few edge cases remain. \\
+ML & \dotwarn & 7/10 & ETA is plausible but B1 is a hard baseline; anomaly has no ground truth; route lookup is the right core choice. \\
+LLM & \dotok & 8/10 & The SQL guardrails and briefing number check are the strongest part of the design. Eval determinism needs care. \\
+Frontend & \dotok & 8/10 & Clear visual identity and sensible layer choices. CARTO key, deck.gl dashed strokes and null-age handling are open details. \\
+Ops \& CI & \dotok & 8/10 & Backups, restore procedure, external Grafana sharing and deploy-over-Tailscale are credible. Restore drill and event catch-up are the gaps. \\
+Data licensing & \dotbad & 5/10 & OpenSky public redistribution and two-account use need written confirmation. The Zenodo claim is currently a mix of two records. \\
+8-week schedule & \dotwarn & 6/10 & Feasible for the core only. Stretch items must stay out until M0--M5 are done. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{4pt}
+\begin{accentcard}
+{\bfseries The five actions I would take first}
+\begin{enumerate}[leftmargin=1.25em,itemsep=2pt,topsep=2pt]
+  \item \textbf{Clear the OpenSky gate in M0.} Ask in writing about public display, a public read-only API, and two personal accounts for one project. Record the answer. If it is no, fall back to one account at 90 s and a private/aggregate-only public demo.
+  \item \textbf{Correct the Zenodo claim.} The CC BY 4.0 record (5815448) is 2019--2021 and anonymised. The 2019--2022 record with \code{icao24}/\code{registration} is under OpenSky's licence, not CC BY. Pick one and fix the README and \code{02-data-sources.md}.
+  \item \textbf{Fix four small correctness bugs:} \code{ref.runways} empty identifiers, \code{next_expected_at} when one collector is down, the watermark when both collectors are silent, and stream-worker event catch-up.
+  \item \textbf{Add the CARTO key} and close the two day-one implementation gaps: gzip request decompression and CORS preview-origin handling.
+  \item \textbf{Protect the core.} No fourth ML model and no stretch before M5. ETA beating B1 is the one success criterion that may not be met; plan the negative-result model card now.
+\end{enumerate}
+\end{accentcard}
+
+\vspace{4pt}
+\begin{softcard}
+{\bfseries Fixed since the first review.} The current docs already resolve most of the earlier blockers: PostGIS is provided by the pinned \code{timescaledb-ha} image; the density calculation is restricted to global OpenSky snapshots; events have a \code{dedupe_key}; flights have a stable \code{flight_id}; MLflow is private; deploy uses Tailscale; the frontend budget is split into a small shell and a lazy map bundle; and compressed-chunk inserts are guarded by a CI test. That is a meaningful improvement.
+\end{softcard}
+
+% ============================================================
+% SCOPE AND METHOD
+% ============================================================
+\sechead{Scope, method and what ``possible'' means}
+
+\begin{minipage}[t]{0.49\linewidth}
+\begin{card}
+{\bfseries What this review covers}
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+  \item \code{docs/00-overview.md} through \code{10-roadmap.md}
+  \item ADRs \code{0001}--\code{0004}
+  \item \code{README.md}, \code{AGENTS.md}
+  \item The original \code{CloudAI-project-intent.pdf}
+\end{itemize}
+I treated the current Level 1 scope as fixed: OpenSky only, no own ADS-B receiver, two home collectors, Oracle/Contabo hosting, public web app, public Grafana dashboards, private MLflow.
+\end{card}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}
+\begin{card}
+{\bfseries The four tests I applied}
+\begin{itemize}[leftmargin=1.1em,itemsep=1.5pt,topsep=2pt]
+  \item \textbf{Technical:} can it be built with the chosen tools and data?
+  \item \textbf{Data:} are the labels, coverage and volume sufficient?
+  \item \textbf{Legal:} may the data be stored and shown publicly?
+  \item \textbf{Operational:} can two people run it for 8 weeks and keep it alive?
+\end{itemize}
+A feature is ``possible'' only if all four hold. A green rating means the current plan passes; amber means it needs a change or a measurement; red means it is not true as written or needs a decision.
+\end{card}
+\end{minipage}
+
+\vspace{5pt}
+\begin{softcard}
+{\bfseries The idea is coherent.} A live map is the hook; the data platform is the engineering story; ETA and unusual-traffic are the ML story; the guarded text-to-SQL chat is the AI story. The non-goals are sensible (no Kafka/Flink, no schedules, no user accounts). The two weakest points are the public-data permission and the amount of work in 8 weeks, not the architecture.
+\end{softcard}
+
+\vspace{3pt}
+\begin{minipage}[t]{0.32\linewidth}
+\pill{okgreen}{GREEN}\\[2pt]
+{\small Possible with the current plan.}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\pill{warn}{AMBER}\\[2pt]
+{\small Possible, but measure or change something first.}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.32\linewidth}
+\pill{alert}{RED}\\[2pt]
+{\small Not true as written, or decision required.}
+\end{minipage}
+
+\vspace{4pt}
+{\small\color{papermuted}
+Assumptions: two-person team; 8 weeks starting 27 October 2026; non-commercial MSc project; no code exists yet; external claims were checked against the providers' documentation on 30 October 2026. This is a design review, not legal advice.
+}
+
+% ============================================================
+% WHAT IS SOLID
+% ============================================================
+\sechead{What is solid}
+
+\begin{card}
+{\bfseries Architecture and hosting.} The ``home collectors push to the cloud'' decision is still the right answer to OpenSky's data-centre blocking, and the ADR now explains why a Tailscale exit node is not the same thing. Oracle Always Free (2 OCPU, 12 GB, 200 GB) is the right cost/scale trade-off, and the Contabo fallback is concrete. Cloudflare for DNS/TLS/rate limits, Tailscale for admin access, no public database port, and multi-arch images are all sensible. The migration rule ``add first, remove later'' is exactly what a deploy-before-code pipeline needs.
+\end{card}
+
+\vspace{3pt}
+\begin{card}
+{\bfseries Data model and pipelines.} This is the strongest part of the docs. Bronze/silver/gold is not decorative: \code{raw} keeps the OpenSky payload normalized but otherwise intact; \code{core} has stable flights and deduplicated events; \code{agg} has a CAGG and a coverage view; \code{ml} and \code{llm} are separate. Natural keys, \code{dedupe_key}, \code{flight_id} that never changes, explicit job windows, and a manual \code{flights_rebuild}/\code{events_rebuild} path are all there. The spool-first collector, R2 archive, catch-up path and DQ checks make the ``nothing is lost, only delayed'' claim mostly true for data that was actually fetched.
+\end{card}
+
+\vspace{3pt}
+\begin{card}
+{\bfseries ML.} The scope is honest: route lookup is core, the re-ranker is stretch; anomaly v1 is statistical; ETA is the only trained model in the core. The ETA design has a real label, a real baseline (B0 distance/speed, B1 distance-band median), time-based split, quantile outputs and coverage metrics. The anomaly design has synthetic injection, persistence and a real-events list because there is no ground truth. Model cards and \code{ops.model_runs} make the results public without exposing MLflow. This is the right level of ambition for 8 weeks.
+\end{card}
+
+\vspace{3pt}
+\begin{card}
+{\bfseries LLM.} The guardrails are the differentiator: a read-only role limited to \code{llm.v_*}, a per-transaction 5 s timeout, a sqlglot allow-list, a 3-call loop cap, a 200-row cap, and the SQL always shown. The briefing is built from a facts JSON and has a number check that rejects hallucinated values. The golden set plus execution accuracy in CI is the right evaluation. This is much stronger than a generic ``chat with your database'' demo.
+\end{card}
+
+\vspace{3pt}
+\begin{card}
+{\bfseries Frontend and ops.} The visual spec is distinctive (dark map, altitude ramp, H3 anomalies, event pulses) and the interaction model is clear. SSE \code{snapshot_ready} plus a cacheable \code{?t=} fetch is the right choice for a 45--90 s feed. The split budget (small shell, lazy map bundle) is realistic. On the ops side, R2 backups, 14-day retention, a documented restore order and externally shared Grafana dashboards are all credible. The public/private boundary is right: MLflow and Dagster stay on the tailnet.
+\end{card}
+
+% ============================================================
+% GATES
+% ============================================================
+\sechead{The gates: what is not possible as written}
+
+\begin{badcard}
+{\large\bfseries Gate 1 · OpenSky public display and two accounts}
+
+\vspace{3pt}
+The docs now correctly say that two accounts for one project must be confirmed against OpenSky's terms. That is necessary but not sufficient. There is a second question the docs do not yet answer: \textbf{may the project publish a public map and a public read-only API that serves OpenSky-derived state vectors?}
+
+The API documentation describes research and non-commercial use, but the data licence is stricter: it limits use to non-profit research/education (plus internal commercial testing and government) and restricts distribution/disclosure of the dataset to collaborators. A public map may qualify as a cited publication; a public \code{/live/snapshot} and \texttt{/aircraft/\{icao24\}/track} serving raw-ish positions is much closer to redistribution. Attribution alone does not resolve this.
+\end{badcard}
+
+\vspace{4pt}
+\begin{tabularx}{\linewidth}{@{}p{5.0cm} X@{}}
+\toprule
+\textbf{Question to put to OpenSky in M0} & \textbf{Why it matters / fallback} \\
+\midrule
+May a non-commercial MSc portfolio display live OpenSky states on a public map with attribution? & If yes, keep the map. If no, the public URL becomes a private demo or a recorded video. \\
+May it expose a public read-only \code{/live/snapshot} and \texttt{/aircraft/\{id\}/track} API, or is that redistribution? & If no, keep the raw endpoints behind auth and publish only aggregate/derived views. The map frontend can still use an authenticated endpoint. \\
+May two teammates use two personal accounts for one project's redundant collectors? & If no, run one collector at 90 s (the map still moves smoothly via dead reckoning). If yes, keep the 45 s offset and document the permission. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{4pt}
+{\small\color{papermuted}
+Action: add this to M0's ``done when'' and keep the written reply in the repo (not the public README). Do not build the public API on the assumption that attribution is enough.}
+
+\vspace{6pt}
+\begin{badcard}
+{\large\bfseries Gate 2 · The Zenodo record is two different datasets}
+
+\vspace{3pt}
+The docs and README currently combine claims that do not belong to one record. This is a factual error, not a judgement call.
+\end{badcard}
+
+\vspace{2pt}
+\begin{tabularx}{\linewidth}{@{}p{2.5cm} p{4.1cm} p{4.1cm} X@{}}
+\toprule
+\textbf{Record} & \textbf{What it contains} & \textbf{Licence / coverage} & \textbf{Use it for} \\
+\midrule
+Zenodo \textbf{5815448} & Monthly \code{flightlist_*.csv.gz}; anonymised aircraft (\code{aircraft_uid}); no \code{icao24} or \code{registration} & \textbf{CC BY 4.0}; January 2019 -- December 2021 & Route priors: only \code{callsign}, \code{origin}, \code{destination} are needed. Safest licence. \\
+Zenodo \textbf{3737101} / latest version \textbf{7923702} & Monthly flight lists with \code{icao24} and \code{registration} & \textbf{OpenSky data licence}, not CC BY; January 2019 -- December 2022 & Only if aircraft identity or 2022 routes are required, and only under OpenSky's terms. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{3pt}
+{\small
+\textbf{Current claim:} ``OpenSky COVID-19 flight dataset on Zenodo (2019--2022), CC BY 4.0, DOI 10.5281/zenodo.3737101.'' \textbf{Problem:} the CC BY record is 2019--2021 and anonymised; the 2019--2022 record with \code{icao24} is not CC BY. \textbf{Fix:} use 5815448 for route priors, or use 7923702 under the OpenSky licence; correct the README and \code{02-data-sources.md} in the same PR.}
+
+\vspace{6pt}
+\begin{warncard}
+{\large\bfseries Gate 3 · Other data licences and service keys}
+
+\vspace{2pt}
+\begin{itemize}[leftmargin=1.1em,itemsep=2pt,topsep=2pt]
+  \item \textbf{OpenSky aircraft database:} non-commercial with attribution, like the API. Record the exact licence text in \code{02} in M3; do not assume it is open data.
+  \item \textbf{OpenFlights airlines (ODbL 1.0):} ODbL has share-alike obligations for derivative databases. Attribution in the README may not be sufficient. Verify whether your use is ``insubstantial''; if not, consider a CC0/Wikidata airline list or publish the derived airline table under ODbL.
+  \item \textbf{CARTO Dark Matter:} free for non-commercial use up to 5 million tile requests/month, with attribution. Raster tiles now require an API key; vector is recommended to use one. Add the key, a tile budget and the Cloudflare Pages preview origins.
+  \item \textbf{OurAirports, Natural Earth:} public domain; no issue. \textbf{H3:} Apache 2.0; no issue.
+\end{itemize}
+\end{warncard}
+
+\vspace{4pt}
+\begin{accentcard}
+{\bfseries If OpenSky says no to public redistribution.} You can still ship a strong project: keep the public landing page and demo video, put the live map behind a simple shared password or allowlist for reviewers, and publish only aggregate/derived dashboards publicly. The data platform, models, eval and guardrails remain the portfolio story. Decide this contingency in M0, not in M6.
+\end{accentcard}
+
+\vspace{4pt}
+\begin{softcard}
+{\bfseries Gate status at a glance}
+\vspace{2pt}
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+  \item \dotbad\ \textbf{OpenSky public map and API} --- M0 written answer; fallback to a private map or an aggregate-only public view.
+  \item \dotwarn\ \textbf{Two accounts for one project} --- M0 written answer; fallback to one collector at 90 s.
+  \item \dotbad\ \textbf{Zenodo record} --- choose 5815448 or 7923702; fix DOI, licence and coverage.
+  \item \dotwarn\ \textbf{CARTO basemap} --- add API key, tile budget and Pages origins.
+  \item \dotwarn\ \textbf{Aircraft DB / OpenFlights} --- record the exact licence; verify ODbL share-alike.
+\end{itemize}
+\end{softcard}
+
+% ============================================================
+% CHANGE LIST
+% ============================================================
+\newpage
+\sechead{Prioritised changes}
+
+{\small
+P0 = before M0/M1; P1 = before M2/M3; P2 = before M4/M5 or polish. ``Where'' points to the document that should change. Each item is small enough to land in one PR.
+}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}p{0.55cm} >{\raggedright\arraybackslash}p{2.25cm} >{\raggedright\arraybackslash}p{7.25cm} >{\raggedright\arraybackslash}p{4.35cm} >{\raggedright\arraybackslash}p{1.55cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Where} & \textbf{Change} & \textbf{Why} & \textbf{Priority} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{\#} & \textbf{Where} & \textbf{Change} & \textbf{Why} & \textbf{Priority} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+
+P0.1 & \code{02}, \code{README}, \code{10} & Resolve OpenSky public-display/API permission and two-account use in M0; record the written answer and add the fallback to the roadmap. & The only true go/no-go. Attribution is not permission to redistribute. & \pill{alert}{P0} \\
+P0.2 & \code{02}, \code{README} & Replace the mixed Zenodo claim with one record: 5815448 (CC BY, 2019--2021, anonymised) or 7923702 (OpenSky licence, 2019--2022, with \code{icao24}). & The current DOI/licence/coverage combination is not a real record. & \pill{alert}{P0} \\
+P0.3 & \code{03} & \code{ref.runways}: filter rows with empty \code{le_ident}/\code{he_ident} or use a surrogate key; the current PK \code{(airport_icao, le_ident)} fails on OurAirports rows with empty identifiers. & The monthly \code{ref_refresh} will break on real OurAirports data. & \pill{alert}{P0} \\
+P0.4 & \code{08} & Add CARTO API key, tile budget and Pages preview origins; note that raster tiles require a key and vector is recommended to use one. & ``Free with attribution'' is still true, but anonymous raster tiles no longer work. & \pill{warn}{P0} \\
+P0.5 & \code{05} & Compute \code{next_expected_at} from active collectors/cadence, not a fixed +45 s. & With one collector down the UI promises a 45 s update that will not arrive. & \pill{warn}{P0} \\
+P0.6 & \code{04} & Define the watermark when no collector has a successful batch in the last 30 min (fall back to \code{now() - 10 min}). & The current \code{min()} over an empty set can leave flights open forever. & \pill{warn}{P0} \\
+P0.7 & \code{04} & Add automatic event catch-up on stream-worker startup (bounded window) or schedule \code{events_rebuild}; do not leave it manual only. & A worker outage longer than 10 min can miss squawks/go-arounds until someone remembers to rebuild. & \pill{warn}{P0} \\
+P0.8 & \code{04} & Widen/robustify \code{agg_backfill_refresh} beyond the 65-minute received window, or track unrefreshed batches explicitly. & One failed hourly run can leave late data outside the lookback forever. & \pill{warn}{P0} \\
+P0.9 & \code{04}, \code{05} & Add explicit gzip request decompression and enforce the 20 MB limit after decompression. & Starlette's \code{GZipMiddleware} compresses responses; it does not decompress request bodies. & \pill{warn}{P0} \\
+P0.10 & \code{05} & Implement CORS preview origins as a regex/allowlist, not a literal \code{https://*.pages.dev} header. & \code{Access-Control-Allow-Origin} does not support wildcard subdomains. & \pill{warn}{P0} \\
+
+P1.1 & \code{04}, \code{06} & Decide what happens to \code{ml.anomalies} when late data changes a bucket: re-score affected buckets, or mark them stale and document it. & \code{anomaly_scoring} never runs for catch-up; the heatmap can disagree with the CAGG. & \pill{warn}{P1} \\
+P1.2 & \code{00}, \code{06} & Add a negative-result path for ETA: report MAE vs B0/B1 even if B1 is not beaten, and keep a model card. & B1 is a strong baseline; 4--6 weeks of arrivals may not beat it. The project should not hinge on one metric. & \pill{warn}{P1} \\
+P1.3 & \code{06} & Validate H3 resolution 4 against real traffic (or test res 5/6 for a Central Europe layer). & A 1,770 km\textsuperscript{2} cell is coarse for airport-level anomalies; the heatmap may only show overflight patterns. & \pill{warn}{P1} \\
+P1.4 & \code{07} & Make \code{now()}-dependent golden questions deterministic: freeze the fixture clock or use fixed reference dates. & Execution accuracy will be flaky if the reference SQL and the model query see different ``now''. & \pill{warn}{P1} \\
+P1.5 & \code{08} & Handle \code{pos_age_s = null} in dead reckoning; do not extrapolate unknown-age states. Confirm the dashed H3 outline with a separate line layer if \code{H3HexagonLayer} cannot dash. & Small but visible map bugs; the visual spec depends on them. & \pill{warn}{P1} \\
+P1.6 & \code{02}, \code{README} & Record the OpenSky aircraft DB exact licence and verify OpenFlights ODbL share-alike; attribution may not be enough for a public app. & Two data sources are currently ``credit only'' without a licence check. & \pill{warn}{P1} \\
+P1.7 & \code{01}, \code{04} & Keep the M1 restore drill as a hard gate; test \code{pg_dump} excluding Timescale chunk data and the replay from R2 on the pinned image. & The backup is the riskiest ops step and the one most likely to be discovered too late. & \pill{warn}{P1} \\
+P1.8 & \code{08} & Measure the 150 KB shell and 800 KB lazy map budgets in M2; lazy-load panels and deck.gl layers if needed. & React 19 + TanStack + Tailwind + UI can exceed 150 KB; the map bundle is the bigger risk. & \pill{warn}{P1} \\
+
+P2.1 & \code{README} & Replace ``every plane in the sky'' with ``aircraft visible to OpenSky's volunteer network''; replace ``nothing is lost'' with ``data already fetched is never lost; gaps are recorded''; clarify the \$40 hard cap vs the \$2--8 typical spend; make 45 s conditional. & The opening overclaims coverage and reliability; the details are more honest than the summary. & \pill{okgreen}{P2} \\
+P2.2 & \code{10} & Add the licensing gate, CARTO key and restore drill to the M0/M1 ``done when'' lists. & These are currently implicit; the roadmap should make them explicit. & \pill{okgreen}{P2} \\
+P2.3 & \code{00} & Add a reference device/connection to the ``<3 s / 60 fps'' criterion, and a fallback for the ETA criterion. & Otherwise ``done'' is untestable on a different laptop. & \pill{okgreen}{P2} \\
+P2.4 & \code{06} & Frame route lookup as a deterministic prior, not ML; keep the ML story on ETA + anomaly. & It is a good core feature, but it is not a trained model. & \pill{okgreen}{P2} \\
+P2.5 & \code{05} & Make \code{llm.v_live_aircraft} respect the 10-minute live window or label stale answers. & A chat answer from a stale snapshot should say so. & \pill{okgreen}{P2} \\
+
+\end{longtable}
+\endgroup
+
+\begin{softcard}
+{\bfseries What I would not change.} Keep the single Timescale/PostGIS store, Dagster, the spool-first collector, the read-only chat role, the private MLflow, the Cloudflare/Tailscale boundary and the core/stretch split. Those are the decisions that make the project explainable in an interview. The fixes above are edge cases and permissions, not a redesign.
+\end{softcard}
+
+\vspace{3pt}
+\begin{softcard}
+{\bfseries Suggested sequencing}
+\vspace{2pt}
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+  \item \textbf{Week 0} --- P0.1--P0.4: permissions, Zenodo, runways, CARTO.
+  \item \textbf{Week 1} --- P0.5--P0.10: API and pipeline correctness before the public URL.
+  \item \textbf{M2} --- P1.1--P1.5: event catch-up, ETA fallback, H3 check, eval time, frontend details.
+  \item \textbf{M4} --- P1.6--P1.8: remaining licences, restore drill, performance budgets.
+  \item \textbf{M5--M6} --- P2 polish; do not start stretch.
+\end{itemize}
+\end{softcard}
+
+\vspace{3pt}
+\begin{softcard}
+{\bfseries Questions to settle with the team in week 0}
+\vspace{2pt}
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt,topsep=2pt]
+  \item Who owns Track A and Track B (O1)?
+  \item Which project name and domain (O5)?
+  \item Is a dedicated low-power collector device approved (O7)?
+  \item If two OpenSky accounts are not allowed, which collector keeps polling?
+  \item Who writes the ETA model card and the README demo script?
+\end{itemize}
+\end{softcard}
+
+% ============================================================
+% SCOPE AND SCHEDULE
+% ============================================================
+\newpage
+\sechead{Scope, schedule and the cut line}
+
+\begin{tabularx}{\linewidth}{@{}p{1.3cm} X X@{}}
+\toprule
+\textbf{M} & \textbf{Main risk} & \textbf{Mitigation} \\
+\midrule
+M0 & OpenSky terms, Oracle capacity, domain, CARTO key & Ask all three vendors in week 0; keep written answers; order the Contabo fallback if A1 is not allocated by end of week 1. \\
+M1 & Restore drill, compression migration, backlog drain & Do not merge the compression policy until the backlog is drained; run the restore drill before M2. \\
+M2 & Map performance, Cloudflare/SSE, CORS & Measure 12k icons and first load on the reference laptop; test SSE through Cloudflare early. \\
+M3 & Flight labels, route coverage, reference loaders & Audit 100 random flights; filter runways; keep the 20-minute boundary rules. \\
+M4 & ETA vs B1, anomaly no ground truth & Start collection now; define a negative result; report synthetic recall and events/day. \\
+M5 & Chat execution accuracy, cost & Freeze fixture time; keep the 3-call cap and \$40 spend limit; test 30+ questions. \\
+M6 & Polish eating the buffer & Freeze features at end of M5; use M6 for README, video and model cards only. \\
+\bottomrule
+\end{tabularx}
+
+\vspace{4pt}
+\begin{minipage}[t]{0.49\linewidth}
+\begin{accentcard}
+{\bfseries Protect (core)}
+\begin{itemize}[leftmargin=1.05em,itemsep=1.5pt,topsep=2pt]
+  \item Collector, spool, R2 archive
+  \item Ingest idempotency and DQ
+  \item Live map + events
+  \item Anomaly v1 + heatmap
+  \item ETA + arrivals board
+  \item Route lookup
+  \item Briefing + guarded chat + eval
+  \item Grafana ops/models dashboards
+\end{itemize}
+\end{accentcard}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}
+\begin{warncard}
+{\bfseries Defer (stretch)}
+\begin{itemize}[leftmargin=1.05em,itemsep=1.5pt,topsep=2pt]
+  \item Destination re-ranker
+  \item Anomaly v2 (STL / Isolation Forest)
+  \item Holding-pattern events
+  \item Self-hosted PMTiles
+  \item Any fourth ML model
+  \item Level 2 ADS-B receiver (out of scope)
+\end{itemize}
+\end{warncard}
+\end{minipage}
+
+\vspace{4pt}
+\begin{warncard}
+{\bfseries The one criterion that may fail.} ``ETA p50 MAE beats B1'' is a real research result, not a delivery task. B1 is a distance-band median from the same data; with 4--6 weeks it can be strong. Keep the baseline, report the result honestly, and make the model card useful even if the challenger is not promoted. A well-analysed near-miss is a better portfolio story than a hidden failure.
+\end{warncard}
+
+\vspace{2pt}
+{\small\color{papermuted}
+\textbf{8-week verdict:} core is feasible for two people if this is the main project and collection starts now. The stretch list is not feasible in the same 8 weeks; it should stay out until M5 is green. The schedule risk is concentrated in M1 (platform), M2 (map), and M4 (ETA); M6 is not a buffer for features.
+}
+
+\vspace{4pt}
+\begin{softcard}
+{\bfseries Four rules to keep the scope honest}
+\begin{itemize}[leftmargin=1.1em,itemsep=2pt,topsep=2pt]
+  \item No stretch until M0--M5 are green.
+  \item No public raw OpenSky data until the M0 permission is recorded.
+  \item No compression policy until the M1 backlog is drained.
+  \item No fourth ML model. ETA and unusual traffic are enough for this project.
+\end{itemize}
+\end{softcard}
+
+% ============================================================
+% DOCUMENT-BY-DOCUMENT
+% ============================================================
+\newpage
+\sechead{Document-by-document notes}
+
+\begingroup
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm} p{1.3cm} >{\raggedright\arraybackslash}p{12.5cm}@{}}
+\toprule
+\textbf{Document} & \textbf{Verdict} & \textbf{Notes and change} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Document} & \textbf{Verdict} & \textbf{Notes and change} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\code{00-overview.md} & \dotwarn & Strong scope, success criteria and known limits. Add the OpenSky public-display gate; make the 45 s cadence conditional on the two-account answer; add a reference device for the map criterion and a negative-result fallback for ETA. \\
+\code{01-architecture.md} & \dotok & Oracle/Contabo, Tailscale, Cloudflare and the deploy order are coherent. Keep the restore drill as a gate; verify \code{pg_dump} excludes chunk data on the pinned image. \\
+\code{02-data-sources.md} & \dotbad & Good field-level detail and SI METAR. Fix the Zenodo record; add the OpenSky public-redistribution question; record the aircraft DB licence and verify OpenFlights ODbL. \\
+\code{03-data-model.md} & \dotok & The strongest document. Natural keys, dedupe, retention and roles are clear. Fix \code{ref.runways}; add a watermark fallback and decide late-data anomaly re-scoring. \\
+\code{04-pipelines.md} & \dotok & Spool, catch-up, idempotency and DQ are well designed. Add gzip decompression, stream-worker event catch-up, a wider backfill lookback, and the empty-watermark case. \\
+\code{05-api-contract.md} & \dotok & Clear boundary and good cache/SSE design. Fix \code{next_expected_at}; make CORS previews a regex; add request decompression; make the live view freshness explicit. \\
+\code{06-ml.md} & \dotwarn & Right scope and good baselines. ETA may not beat B1; H3 res 4 may be coarse; late data can stale the heatmap; route lookup is not ML. \\
+\code{07-llm.md} & \dotok & Excellent guardrails. Freeze fixture time for \code{now()} questions; label stale live answers; keep the cost cap. \\
+\code{08-frontend.md} & \dotok & Strong visual spec. Add the CARTO key; handle null \code{pos_age_s}; confirm the dashed H3 outline; measure the two budgets. \\
+\code{09-conventions.md} & \dotok & Clear tooling and migration rules. Add the gzip/licensing notes; keep the stretch freeze. \\
+\code{10-roadmap.md} & \dotok & Good milestone structure. Add the licensing gate, CARTO key and restore drill to the ``done when'' lists; protect the cut line. \\
+ADR 0001 & \dotwarn & Correct home-collector decision. Add the public-display permission and the conditional 45 s. \\
+ADR 0002 & \dotok & The revised ``Level 2 is out of scope'' is honest and specific. Keep it. \\
+ADR 0003 & \dotok & Good single-store decision; the pinned 2.19+ and compressed-chunk test are the right safeguards. \\
+ADR 0004 & \dotok & Realistic Oracle choice with a concrete fallback. Capacity is the only open risk. \\
+\code{README.md} & \dotwarn & The plain-language story is good, but the opening overclaims ``every plane'' and ``nothing is lost''. Fix the Zenodo claim, the \$40 cap and the conditional 45 s. \\
+\code{AGENTS.md} & \dotok & Clear scope, idempotency and migration rules. Consider adding ``do not expose raw OpenSky data publicly until the M0 permission is recorded''. \\
+\end{longtable}
+\endgroup
+
+% ============================================================
+% M0 CHECKLIST AND SOURCES
+% ============================================================
+\sechead{Closing assessment}
+
+\begin{accentcard}
+{\large\bfseries Build it, but clear the gate first.}
+
+\vspace{3pt}
+The docs are past the ``is this a good idea?'' stage. The architecture is appropriate, the data model is strong, and the LLM guardrails are unusually good for a student project. The remaining risks are external: OpenSky's permission, one data-source fact, and the ETA result. Resolve the first two in week 0; plan for the third in the model card.
+
+\vspace{3pt}
+\textbf{Success at the end of week 8:} a public map that is honest about coverage; one ML result with a baseline and a model card; a chat that shows its SQL and passes the fixed eval; and a stranger can run the stack from the README.
+\end{accentcard}
+
+\vspace{5pt}
+\newpage
+\sechead{M0 go/no-go checklist}
+
+\begin{card}
+\begin{itemize}[leftmargin=1.55em,itemsep=3pt,topsep=2pt]
+  \item[$\square$] Written OpenSky answer: public map, public API, two accounts.
+  \item[$\square$] If two accounts are not allowed: one collector at 90 s; update README/00/01.
+  \item[$\square$] If public API is not allowed: private map or aggregate-only public view; update the success criteria.
+  \item[$\square$] Zenodo record chosen and DOI/licence/coverage corrected in README/02.
+  \item[$\square$] \code{ref.runways} loader filters empty identifiers; a test fixture covers it.
+  \item[$\square$] CARTO key created, tile budget set, Pages preview origins allowed.
+  \item[$\square$] Oracle A1 allocated or Contabo fallback ordered.
+  \item[$\square$] Domain registered; Cloudflare and Tailscale access tested.
+  \item[$\square$] Restore drill scheduled for M1, not M6.
+\end{itemize}
+\end{card}
+
+\vspace{4pt}
+\begin{softcard}
+{\bfseries Sources checked (30 October 2026).}
+\begin{itemize}[leftmargin=1.05em,itemsep=1.5pt,topsep=2pt]
+  \item OpenSky REST API (OAuth2, 4,000/8,000 credits, 4 credits per global call): \url{https://openskynetwork.github.io/opensky-api/rest.html}
+  \item OpenSky terms of use: \url{https://opensky-network.org/about/terms-of-use}
+  \item Zenodo CC BY record: \url{https://zenodo.org/records/5815448}; original/latest record: \url{https://zenodo.org/records/7923702}
+  \item CARTO basemaps FAQ (free tier, key requirement): \url{https://docs.carto.com/faqs/carto-basemaps.md}
+  \item Grafana externally shared dashboards (OSS support): \url{https://grafana.com/docs/grafana/latest/visualizations/dashboards/share-dashboards-panels/shared-dashboards/}
+  \item TimescaleDB HA image (PostGIS included): \url{https://github.com/timescale/timescaledb-docker-ha}
+  \item Timescale compressed-chunk \code{ON CONFLICT} issue: \url{https://github.com/timescale/timescaledb/issues/7672}
+  \item OurAirports runways data (empty identifiers exist): \url{https://davidmegginson.github.io/ourairports-data/runways.csv}
+  \item Claude Haiku 5.5 model page: \url{https://platform.claude.com/docs/en/models/haiku-5-5/overview}
+  \item MapLibre bundle size reference: \url{https://bundlephobia.com/package/maplibre-gl@5.0.0}
+\end{itemize}
+\end{softcard}
+
+\vspace{3pt}
+{\scriptsize\color{papermuted}
+This review is based on the documents as of 30 October 2026. It does not replace a legal review of the data licences; the OpenSky and ODbL points should be confirmed with the providers. The author did not modify the source documents.
+}
+
+\end{document}

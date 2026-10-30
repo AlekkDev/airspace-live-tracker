@@ -1,0 +1,94 @@
+% Shared style for the Airspace Monitor reports
+\usepackage[a4paper,margin=1.9cm,top=2.25cm,bottom=2.05cm,headheight=18pt]{geometry}
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,calc,shapes.geometric,backgrounds,arrows.meta}
+\usepackage[most]{tcolorbox}
+\usepackage{booktabs}
+\usepackage{amssymb}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{ragged2e}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{fontawesome5}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{lastpage}
+
+\definecolor{ink}{HTML}{0B1020}
+\definecolor{panel}{HTML}{111A2E}
+\definecolor{border}{HTML}{22304F}
+\definecolor{textlight}{HTML}{E7ECF6}
+\definecolor{muted}{HTML}{9AA8C2}
+\definecolor{accent}{HTML}{4CC3FF}
+\definecolor{violet}{HTML}{B392FF}
+\definecolor{okgreen}{HTML}{2FAE78}
+\definecolor{okgreenlight}{HTML}{E6F7F0}
+\definecolor{warn}{HTML}{C77A00}
+\definecolor{warnlight}{HTML}{FFF6E5}
+\definecolor{alert}{HTML}{C94646}
+\definecolor{alertlight}{HTML}{FDEEEE}
+\definecolor{paper}{HTML}{F7F9FD}
+\definecolor{papertext}{HTML}{1B2438}
+\definecolor{papermuted}{HTML}{5B6B85}
+\definecolor{lightborder}{HTML}{DCE4F2}
+\definecolor{softblue}{HTML}{EAF6FF}
+\definecolor{softviolet}{HTML}{F1ECFF}
+\definecolor{softgrey}{HTML}{F0F3F9}
+
+\setmainfont{Lato}
+\setsansfont{Lato}
+\setmonofont{Consolas}[Scale=0.92]
+\renewcommand{\familydefault}{\sfdefault}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\RaggedRight
+\renewcommand{\arraystretch}{1.32}
+\setlength{\tabcolsep}{5pt}
+\setlength{\emergencystretch}{1em}
+\hypersetup{hidelinks}
+
+\newcommand{\sechead}[1]{%
+  \vspace{7pt}%
+  {\color{papertext}\fontsize{17}{20}\selectfont\bfseries #1}\par
+  \vspace{-2pt}{\color{accent}\rule{\linewidth}{1.3pt}}\par
+  \vspace{5pt}%
+}
+\newcommand{\subhead}[1]{%
+  \vspace{5pt}{\color{papertext}\fontsize{11.5}{14}\selectfont\bfseries #1}\par
+  \vspace{1pt}%
+}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\docsrc}[1]{{\scriptsize\color{papermuted}\texttt{\detokenize{#1}}}}
+
+\newcommand{\pill}[2]{%
+  \begin{tikzpicture}[baseline=(x.base)]%
+    \node[fill=#1,text=white,rounded corners=2.4pt,inner sep=2.6pt,font=\scriptsize\bfseries] (x) {#2};%
+  \end{tikzpicture}%
+}
+\newcommand{\dotok}{\textcolor{okgreen}{\faCircle}}
+\newcommand{\dotwarn}{\textcolor{warn}{\faCircle}}
+\newcommand{\dotbad}{\textcolor{alert}{\faCircle}}
+
+\newtcolorbox{card}[1][]{enhanced,breakable,colback=white,colframe=lightborder,boxrule=0.6pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+\newtcolorbox{accentcard}[1][]{enhanced,breakable,colback=softblue,colframe=accent,boxrule=0.8pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+\newtcolorbox{warncard}[1][]{enhanced,breakable,colback=warnlight,colframe=warn,boxrule=0.8pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+\newtcolorbox{badcard}[1][]{enhanced,breakable,colback=alertlight,colframe=alert,boxrule=0.8pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+\newtcolorbox{violetcard}[1][]{enhanced,breakable,colback=softviolet,colframe=violet,boxrule=0.8pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+\newtcolorbox{softcard}[1][]{enhanced,breakable,colback=softgrey,colframe=lightborder,boxrule=0.6pt,arc=2.2mm,left=4mm,right=4mm,top=3mm,bottom=3mm,#1}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\scriptsize\color{papermuted}Airspace Monitor · Documentation Review}
+\fancyhead[R]{\scriptsize\color{papermuted}30 October 2026}
+\fancyfoot[L]{\scriptsize\color{papermuted}Level 1 · pre-implementation}
+\fancyfoot[R]{\scriptsize\color{papermuted}\thepage\ / \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{lightborder}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{lightborder}\leaders\hrule height \footrulewidth\hfill}}
