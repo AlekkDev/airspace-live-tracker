@@ -33,7 +33,7 @@ flowchart TB
 These live in `libs/airspace_common` and are used by every pipeline and by model training, so serving and training compute features the same way.
 
 - **Live window:** `LIVE_WINDOW_SECONDS = 600`. A snapshot is *live* when `snapshot_time ≥ now() − 600 s`. Only live snapshots reach the map stream, the stream-worker and the event feed in real time.
-- **Latest snapshot:** the `states_global` batch with `http_status = 200` and the greatest `snapshot_time`. Snapshots from the two collectors are never merged.
+- **Latest snapshot:** the `states_global` batch with `http_status = 200` and the greatest `snapshot_time`.
 - **Height above an airport** (`altitude.height_above_airport_m(state, airport, metar)`):
   1. If `baro_altitude_m` is set and the airport has a METAR with `observed_at` within 90 min before the state: `baro_altitude_m + 8.3 × (qnh_hpa − 1013.25) − elevation_m`. Method `qnh`.
   2. Else if `baro_altitude_m` is set: `baro_altitude_m − elevation_m`. Method `uncorrected`.
@@ -75,14 +75,16 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 | PC off | Gap, visible in `ops.ingest_batches`, Grafana and a `collector_gap` event. The other collector keeps its own 90 s grid |
 | Clock skew | `snapshot_time` comes from OpenSky. `requested_at` is only used for slot and lag metrics |
 
-**Spool layout:** `spool/pending/`, `spool/sent/`, `spool/rejected/`, `spool/archive/`.
+**Spool layout:** `spool/pending/`, `spool/sent/`, `spool/rejected/`, `spool/archive/`, plus `spool/state/` (flight-list progress per day, so a restart neither repeats nor skips windows; kept 7 days), `spool/logs/collector.log` (JSON lines, rotated at 10 MB × 5) and `spool/collector.lock` (one collector per spool; a second process refuses to start, because it would double credit use).
+
+**Status:** `uv run -m collector status` prints the pending file count and size and the newest batches.
 
 **Archive:** at 00:30 UTC, compact yesterday's `sent/` state-vector files into `spool/archive/states/YYYY-MM-DD.parquet` (one row per state vector, plus `batch_id`) and flight-list files into `spool/archive/flights/YYYY-MM-DD.parquet`, then delete those JSON files. At 01:00 UTC, `rclone copy` the archive to Cloudflare R2 `airspace-archive/<collector_id>/`. Local archives older than `ARCHIVE_RETENTION_DAYS` (90) are deleted; R2 keeps everything.
 
 **Spool-only mode:** `UPLOAD_ENABLED=false`, used from M0 before the server exists. When the server is live, set it to `true`; the uploader drains `pending/` (see [Catch-up](#catch-up-after-an-outage-or-the-m0-backlog)).
 
 **Config (env, documented in `.env.example`):**
-`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `OFFSET_SECONDS` (`0` on pc-daniel, `45` on pc-alek), `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=90`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
+`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `OFFSET_SECONDS` (`0` on pc-daniel), `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=90`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
 
 ## P2 · Ingest
 
@@ -153,7 +155,7 @@ For each finalized `core.flights` row of the window, find the `raw.opensky_fligh
 ### `anomaly_scoring`
 
 1. `CALL refresh_continuous_aggregate('agg.traffic_h3_15m', bucket_start, bucket_end)` for the bucket that just closed, then read it.
-2. Skip the bucket when `n_global_snapshots < 10`.
+2. Skip the bucket when `n_global_snapshots < 5`.
 3. Score every cell with the active baseline ([06](06-ml.md#1--unusual-traffic-anomaly-detection)). A cell is **flagged** when `|z| ≥ 3` and `max(observed, expected) ≥ 2`. Store flagged cells in `ml.anomalies` with `persistent = true` when the same cell was flagged in the same direction in the previous bucket.
 4. **Clusters:** persistent cells of the same direction that are H3 neighbours (`grid_disk` k = 1) form one cluster. Its **anchor** is the cell with the largest `|z|`.
 5. **Events** (only for clusters whose anchor centre lies in the Europe box lat 34–72, lon −25–45):
@@ -214,4 +216,4 @@ The **weekly collection target** ([00](00-overview.md#success-criteria)) is comp
 
 ## Stretch: holding detection
 
-Built only if the roadmap promotes it. Within 60 km of a target airport, a flight is holding when its last 15 min of positions form a polyline that crosses itself. Heading-change sums are not used: at 45–90 s sampling a 270° turn aliases to −90°.
+Built only if the roadmap promotes it. Within 60 km of a target airport, a flight is holding when its last 15 min of positions form a polyline that crosses itself. Heading-change sums are not used: at 90 s sampling a 270° turn aliases to −90°.

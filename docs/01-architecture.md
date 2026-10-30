@@ -6,19 +6,14 @@
 flowchart LR
   subgraph Home["Home (residential IPs)"]
     C1["Collector pc-daniel<br/>offset 0 s"]
-    C2["Collector pc-alek<br/>offset 45 s"]
     S1[("Spool + Parquet archive")]
-    S2[("Spool + Parquet archive")]
     C1 --- S1
-    C2 --- S2
   end
 
   OS["OpenSky REST API"] -->|"/states/all every 90 s<br/>/flights/all daily"| C1
-  OS --> C2
 
   CF["Cloudflare<br/>DNS · proxy · rate limits"]
   C1 -->|"HTTPS POST batches"| CF
-  C2 --> CF
 
   subgraph VM["Oracle Cloud VM (docker compose)"]
     CADDY["Caddy"]
@@ -47,7 +42,6 @@ flowchart LR
   LLM["Claude API"] <--> API
   LLM <--> ORCH
   S1 -->|"daily"| R2[("Cloudflare R2<br/>archives + backups")]
-  S2 --> R2
   ORCH -->|"backup"| R2
 
   WEB["React app<br/>Cloudflare Pages"] -->|"REST + SSE"| CF
@@ -73,7 +67,7 @@ flowchart LR
 
 OpenSky blocks or throttles data-centre IPs. Collectors run on residential connections and **push** to the server; the server never calls OpenSky ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
 
-Two collectors with separate OpenSky accounts poll on the same 90 s grid, offset by 45 s. With both running the map refreshes about every 45 s; with one, every 90 s. Each collector computes its slots from its NTP-synced clock; there is no coordination protocol.
+One collector polls on a 90 s grid, so the map refreshes every 90 s ([D4](11-tasks.md#decided-while-building)). It computes its slots from its NTP-synced clock.
 
 ## Hosting
 
@@ -108,6 +102,8 @@ VM
 
 ## Networking and security
 
+**While the project is private ([D3](11-tasks.md#decided-while-building)):** no inbound ports are open to the internet. Collectors upload to ingest-api over the tailnet, using `tailscale serve` as for Dagster, and Cloudflare, Caddy and port 443 are not set up. The table below is the target state, and every item in it is in place before a public URL is shared.
+
 | Concern | Decision |
 |---|---|
 | DNS and edge | `<domain>` on Cloudflare. `api`, `ingest`, `grafana` are proxied records; SSL mode Full (strict) |
@@ -134,9 +130,9 @@ The collectors copy their Parquet archives to R2 `airspace-archive/` daily, so r
 
 | Item | Estimate | Basis |
 |---|---|---|
-| State vectors | ~19M rows/day | 2 collectors × 960 snapshots × ~10k aircraft |
-| Raw size | ~5 GB/day uncompressed, ~0.5 GB/day compressed | ~250–300 bytes/row with 2 indexes; ~10× compression |
-| Raw at 90 days | ~50–60 GB | 2 uncompressed days + 88 compressed days |
+| State vectors | ~11M rows/day | 1 collector × 960 snapshots × ~11.6k aircraft (spool sample, 2026-10) |
+| Raw size | ~3 GB/day uncompressed, ~0.3 GB/day compressed | ~250–300 bytes/row with 2 indexes; ~10× compression |
+| Raw at 90 days | ~30–35 GB | 2 uncompressed days + 88 compressed days |
 | Everything else | < 15 GB | predictions with retention, flight lists, aggregates |
 | RAM | ~8 GB steady, ~10 GB during training | Postgres 4 GB, Dagster 1.5 GB, MLflow 0.5 GB, Grafana 0.3 GB, services 1.5 GB |
 
@@ -151,7 +147,7 @@ These are estimates. M0 measures real row counts and Parquet sizes from the spoo
 | Claude API (Haiku; briefing ~$1.50, chat ~$0.005/question, capped) | $2–8 typical, ≤ $40 hard limit |
 | Domain | ~€1 |
 | Cloudflare DNS/Pages, GitHub, GHCR, Tailscale | €0 |
-| Electricity for two home PCs (estimate, 50–100 W each) | €8–50; < €2 on a dedicated low-power device |
+| Electricity for one home PC (estimate, 50–100 W) | €4–25; < €2 on a dedicated low-power device |
 | **Total** | **€5–15 plus electricity** |
 
 ## Later: Level 2 (out of scope)

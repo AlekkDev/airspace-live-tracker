@@ -13,6 +13,7 @@ The docs in `docs/` define the system. Read the relevant one before changing cod
 - UI, layers, colours → `docs/08-frontend.md`
 - Repo layout, tooling, git workflow → `docs/09-conventions.md`
 - Scope (core vs stretch), milestones → `docs/00-overview.md`, `docs/10-roadmap.md`
+- What exists and what is left → `docs/11-tasks.md` (update a task's status in the same PR as the work)
 
 If a change contradicts a doc, stop and say so. Do not silently diverge. When a change is agreed, update the doc in the same change.
 

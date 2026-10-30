@@ -7,7 +7,7 @@ A live map of every plane in the sky, with predictions and an AI assistant on to
 ## How it works
 
 1. **Source:** OpenSky, a free, volunteer-run network that reports the position of aircraft worldwide.
-2. **Collect:** two home PCs fetch every plane's position every 90 seconds, taking turns, so we get an update about every 45 seconds. They run at home because OpenSky blocks requests from data centres.
+2. **Collect:** one home PC fetches every plane's position every 90 seconds. It runs at home because OpenSky blocks requests from data centres.
 3. **Process:** a cloud server stores the positions, works out flights, spots unusual traffic and predicts arrivals.
 4. **Show:** a public website with the live map, an arrival board, an alert feed, an AI summary and an AI chat.
 
@@ -38,7 +38,7 @@ A live map of every plane in the sky, with predictions and an AI assistant on to
 |---|---|
 | OpenSky only sees what its volunteers' receivers hear, so a receiver going offline looks like a traffic drop | "Unusually quiet" areas are labelled as possibly a coverage gap |
 | Planes don't broadcast where they're going | Destinations are shown as the top 3 guesses, labelled as estimates |
-| We see each plane only every 45–90 seconds | Arrival times are shown as ranges, accurate to about a minute at best |
+| We see each plane only every 90 seconds | Arrival times are shown as ranges, accurate to about a minute at best |
 | No airline schedules or air-traffic-control data | Arrival times far from the airport have wider ranges |
 | Collection depends on home internet | Gaps are shown openly on the dashboard and in the feed |
 | The AI chat won't always be right | Every answer shows its query; we test it against a fixed question set and aim for 80% correct |
@@ -50,7 +50,7 @@ About **€5–15 a month**, plus electricity for the home PCs:
 - AI features: about $2–8, with a hard cap.
 - Domain: about €1.
 - Off-site backups: €0–2.
-- Electricity for two PCs running all day: an estimated €8–50, under €2 once collection moves to a small dedicated device.
+- Electricity for one PC running all day: an estimated €4–25, under €2 once collection moves to a small dedicated device.
 
 ## Status
 

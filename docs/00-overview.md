@@ -13,7 +13,7 @@ Level 1 uses OpenSky's free API as the only live source. Everything below is Lev
 
 | Feature | Description |
 |---|---|
-| Data collection | Two home collectors poll OpenSky every 90 s (offset 45 s), spool locally, upload, archive to R2; daily OpenSky flight lists |
+| Data collection | One home collector polls OpenSky every 90 s, spools locally, uploads, archives to R2; daily OpenSky flight lists |
 | Live map | Dark world map; aircraft coloured by altitude, moving smoothly between snapshots |
 | Unusual-traffic heatmap | H3 hexagons with unusually high or low traffic for that hour of the week (statistical v1) |
 | Event feed | Emergency squawks, go-arounds, unusual-traffic start/end, collector gaps, data-quality failures |
@@ -50,10 +50,10 @@ These are permanent for Level 1. The product works around them and says so.
 |---|---|---|
 | OpenSky sees only what its volunteer receivers hear | A receiver outage looks like a traffic drop | "Low" anomalies carry a coverage-gap caveat |
 | No ground truth for unusual traffic | Can't measure accuracy directly | Synthetic injection + list of known real events |
-| 45–90 s between snapshots | Landing times accurate to about a minute; short manoeuvres missed | ETAs as ranges; precision stated in the model card |
+| 90 s between snapshots | Landing times accurate to about a minute; short manoeuvres missed | ETAs as ranges; precision stated in the model card |
 | Aircraft don't broadcast destinations | Destinations are estimates; diversions show late | Top-3 with probabilities, labelled "estimate" |
 | No schedules or air-traffic-control data | Far-out ETAs can't foresee holding or runway changes | Wider p10–p90 ranges |
-| 4,000 credits per account per day | No faster global polling | Two accounts on a 45 s offset (subject to OpenSky's terms) |
+| 4,000 credits per account per day | No faster global polling | One account, 90 s refresh ([D4](11-tasks.md#decided-while-building)) |
 | Collection depends on home internet | Gaps happen | Shown openly; reduced by a dedicated low-power device |
 | Text-to-SQL is never 100% correct | Some wrong answers | SQL always shown; 80% eval target |
 

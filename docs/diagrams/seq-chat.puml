@@ -1,0 +1,21 @@
+@startuml seq-chat
+skinparam shadowing false
+hide footbox
+skinparam defaultFontName Arial
+
+actor "Visitor" as U
+participant "public-api" as A
+participant "Claude API" as C
+database "PostgreSQL\n(read-only role)" as D
+
+U -> A : POST /chat {question}
+A -> A : check length, per-IP and daily limits
+A -> C : question + view catalogue + run_sql tool
+C --> A : run_sql(sql)
+A -> A : guard: one SELECT, allowed views\nand functions only
+A -> D : read-only transaction, 5 s timeout, max 200 rows
+D --> A : rows
+A -> C : rows
+C --> A : answer
+A --> U : answer + the SQL + rows
+@enduml

@@ -1,0 +1,40 @@
+@startuml use-cases
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam packageStyle rectangle
+
+actor "Visitor" as visitor
+actor "Team member\n(operator)" as operator
+actor "OpenSky API" as opensky
+actor "Claude API" as claude
+actor "Scheduler\n(timers, Dagster)" as scheduler
+
+rectangle "Airspace Live Tracker" {
+  usecase "Watch live traffic\non the world map" as UC1
+  usecase "Inspect an aircraft\n(trail, destination estimate)" as UC2
+  usecase "See unusual-traffic\nheatmap and event feed" as UC3
+  usecase "See predicted arrivals\n(LOWW, LZIB, LHBP)" as UC4
+  usecase "Read the AI briefing" as UC5
+  usecase "Ask a question in\nplain English" as UC6
+  usecase "Collect and ingest\ntraffic data" as UC7
+  usecase "Refresh data, retrain models,\nwrite the AI briefing" as UC8
+  usecase "Monitor ingestion, gaps,\ndata quality and models" as UC9
+}
+
+visitor --> UC1
+visitor --> UC2
+visitor --> UC3
+visitor --> UC4
+visitor --> UC5
+visitor --> UC6
+visitor --> UC9
+operator --> UC9
+
+UC7 --> opensky
+UC6 --> claude
+scheduler --> UC8
+scheduler --> UC7
+UC8 --> claude
+@enduml
