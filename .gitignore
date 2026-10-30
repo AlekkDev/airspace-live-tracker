@@ -1,0 +1,25 @@
+# Secrets: never commit (docs/09-conventions.md#configuration-and-secrets)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Collector data
+spool/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# JS
+node_modules/
+dist/
+
+# Local notes
+docs/review-notes.md

@@ -1,0 +1,16 @@
+[project]
+name = "airspace-collector"
+version = "0.1.0"
+description = "P1 collector: polls OpenSky on a fixed grid and spools every response (docs/04-pipelines.md#p1--collector)."
+requires-python = ">=3.12,<3.13"
+dependencies = ["airspace-common", "httpx>=0.28", "uuid6>=2024.7"]
+
+[tool.uv.sources]
+airspace-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/collector"]
