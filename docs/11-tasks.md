@@ -69,7 +69,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | M1.6 | ingest-api `POST /ingest/v1/batches` ([05](05-api-contract.md#post-ingestv1batches)) | A | ✅ | Running on the VM since 2026-10-30, built there by hand until M1.15. `infra/test-db.sh` covers it end to end |
 | M1.7 | Admin CLI `add-collector` (argon2id key hash) | A | ✅ | Run through the `ingest-admin` compose service |
 | M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ✅ | Enabled on pc-daniel 2026-10-30 |
-| M1.9 | Drain the M0 backlog | A | ⬜ | |
+| M1.9 | Drain the M0 backlog | A | ✅ | Drained 2026-10-30: 736 snapshots, 8.75M state vectors, 119,723 flights, nothing rejected. About 230 B/row before compression, so M1.11 matters next |
 | M1.10 | `agg.traffic_h3_15m`, `agg.coverage_15m`, `agg_backfill_refresh` | A | ⬜ | |
 | M1.11 | Compression-policy migration, merged after the drain | A | ⬜ | |
 | M1.12 | Dagster webserver, daemon and code location (tailnet only) | A | ⬜ | |
