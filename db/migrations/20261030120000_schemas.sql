@@ -1,0 +1,10 @@
+-- migrate:up
+CREATE SCHEMA raw;
+CREATE SCHEMA ref;
+CREATE SCHEMA core;
+CREATE SCHEMA agg;
+CREATE SCHEMA ml;
+CREATE SCHEMA llm;
+CREATE SCHEMA ops;
+
+-- migrate:down

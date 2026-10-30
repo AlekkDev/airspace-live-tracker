@@ -10,7 +10,7 @@ One PostgreSQL 16 instance (image `timescale/timescaledb-ha:pg16`, pinned in `in
 | `dagster` | `dagster` | Dagster run storage, event log, schedules |
 | `mlflow` | `mlflow` | MLflow tracking and model registry metadata (artifacts live on the `mlflow-artifacts` volume, see [01](01-architecture.md#backups)) |
 
-Migrations for `airspace` live in `db/migrations/` as plain, forward-only SQL applied with **dbmate** as `airspace_owner`. Dagster and MLflow manage their own schemas.
+Migrations for `airspace` live in `db/migrations/` as plain, forward-only SQL applied with **dbmate** as `airspace_owner`. Dagster and MLflow manage their own schemas. Login roles, the three databases and the `timescaledb` and `postgis` extensions need a superuser, so `infra/db/10-airspace.sh` creates them once, when the data volume is first created. Migrations hold the privileges.
 
 ## Schemas in `airspace`
 
