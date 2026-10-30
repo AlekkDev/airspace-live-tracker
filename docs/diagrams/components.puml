@@ -1,0 +1,57 @@
+@startuml components
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam componentStyle rectangle
+skinparam defaultFontSize 16
+
+actor "Visitor" as visitor
+cloud "OpenSky API" as opensky
+cloud "Claude API" as claude
+cloud "aviationweather.gov\n(METAR)" as metar
+
+package "Home PC" {
+  component "Collector" as collector
+  database "Local spool" as spool
+}
+
+package "Cloudflare" {
+  component "Edge\n(DNS, proxy, rate limits)" as edge
+  component "Web app\n(React, MapLibre, deck.gl)" as web
+  database "R2\n(archives, backups)" as r2
+}
+
+package "Oracle Cloud VM (docker compose)" {
+  component "Caddy" as caddy
+  component "ingest-api" as ingest
+  component "public-api" as api
+  component "stream-worker" as stream
+  component "Dagster\n(jobs, training)" as dagster
+  component "MLflow\n(private)" as mlflow
+  component "Grafana" as grafana
+  database "PostgreSQL\nTimescaleDB + PostGIS" as db
+}
+
+opensky --> collector : states, flight lists
+collector --> spool
+collector --> edge : HTTPS batches
+collector --> r2 : daily archive
+visitor --> web
+web --> edge : REST + SSE
+edge --> caddy
+caddy --> ingest
+caddy --> api
+caddy --> grafana
+ingest --> db
+db --> stream : NOTIFY
+db --> api : NOTIFY
+stream --> db
+api --> db
+grafana --> db
+dagster --> db
+dagster --> mlflow
+dagster --> r2 : backup
+metar --> dagster
+api --> claude : chat
+dagster --> claude : briefing
+@enduml

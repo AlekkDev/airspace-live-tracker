@@ -17,3 +17,5 @@ One PostgreSQL 16 instance with TimescaleDB (hypertables, compression, continuou
   - ClickHouse: faster analytics, but a second system with weaker geospatial and relational support.
   - Kafka + a data lake: unjustified at this scale.
   - Managed cloud Postgres: monthly cost and no Timescale compression.
+
+**Update 2026-10-30:** with one collector the volume is about 11M rows/day ([01 Sizing](../01-architecture.md#sizing)).

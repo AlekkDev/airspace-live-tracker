@@ -50,7 +50,7 @@ erDiagram
 
 ```sql
 CREATE TABLE ops.collectors (
-  collector_id     text PRIMARY KEY,            -- 'pc-daniel', 'pc-alek', 'dev-01'
+  collector_id     text PRIMARY KEY,            -- 'pc-daniel', 'dev-01'
   owner            text NOT NULL,
   offset_seconds   smallint NOT NULL CHECK (offset_seconds IN (0, 45)),
   api_key_hash     text NOT NULL,               -- argon2id; the only place a collector key is stored server-side
@@ -177,7 +177,7 @@ SELECT add_compression_policy('raw.state_vectors', interval '2 days');
 Rules:
 - Every row comes from a `states_global` query. Level 1 has no regional queries, so traffic density never mixes coverage areas.
 - Inserts use `ON CONFLICT DO NOTHING`; re-uploading a batch is harmless.
-- The two collectors' snapshots have different `snapshot_time` values (45 s apart) and never conflict. They are not merged.
+- Snapshots have different `snapshot_time` values (90 s apart) and never conflict.
 - Rows whose position did not change between snapshots are kept. Consumers that need distinct positions dedupe on `(icao24, time_position)`.
 - Older history than 90 days is read from the collectors' Parquet archives with DuckDB, never re-inserted.
 
@@ -368,8 +368,8 @@ CREATE TABLE agg.baseline_h3_how (
 );
 ```
 
-- `density = n_obs / n_global_snapshots`: the average number of airborne aircraft in the cell during the bucket. One collector being offline halves both numbers and leaves density unchanged.
-- **Expected snapshots per bucket:** 20 (two collectors × 10). A bucket is scored only when `n_global_snapshots ≥ 10`.
+- `density = n_obs / n_global_snapshots`: the average number of airborne aircraft in the cell during the bucket. Missed snapshots lower both numbers and leave density unchanged.
+- **Expected snapshots per bucket:** 10. A bucket is scored only when `n_global_snapshots ≥ 5`.
 - The refresh policy only covers the last 2 h. Data that arrives later is materialised by the `agg_backfill_refresh` job ([04](04-pipelines.md#p4--orchestrated-jobs)). Never refresh a window whose raw data has not been loaded yet: refreshing empty raw data deletes the materialised rows.
 
 ## `ml`: predictions

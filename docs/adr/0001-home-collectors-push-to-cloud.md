@@ -19,3 +19,5 @@ On Windows the collector runs as a Task Scheduler task that starts at boot witho
 - Alternatives considered:
   - Server polling OpenSky directly: blocked.
   - Server polling through a Tailscale exit node at home: still depends on home uptime and adds moving parts.
+
+**Update 2026-10-30:** one collector on one account, 90 s refresh. OpenSky's terms rule out the second account ([D4](../11-tasks.md#decided-while-building)).

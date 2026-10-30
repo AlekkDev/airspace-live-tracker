@@ -6,7 +6,7 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 
 **Server-side calls are not possible:** OpenSky blocks or throttles data-centre IP ranges, so every OpenSky request comes from a collector on a home connection ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
 
-**Accounts:** two personal accounts, one per teammate, each with its own API client. Using two accounts for one project must be confirmed against OpenSky's terms of use in M0 ([10](10-roadmap.md)). If it is not allowed, only pc-daniel polls and the map refreshes every 90 s.
+**Accounts:** one personal account with one API client, used by pc-daniel. OpenSky's terms of use (read 2026-10-29) forbid multiple accounts to get more API requests (3(v)), and require a prior written licence for automated or live REST API use, even non-profit (3(vi)). A licence request is needed before any public launch.
 
 **Auth:** OAuth2 client credentials. Exchange `client_id` and `client_secret` at `https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token` for a bearer token and refresh it before `expires_in` runs out. Basic auth is not used.
 
@@ -72,12 +72,14 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 
 | Dataset | Source | Licence | Use | Refresh |
 |---|---|---|---|---|
-| Airports | OurAirports `airports.csv` | Public domain | ICAO/IATA, coordinates, type, elevation | monthly |
-| Runways | OurAirports `runways.csv` | Public domain | Runway headings for wind components | monthly |
+| Airports | OurAirports `airports.csv` | Public domain | ICAO/IATA, coordinates, type, elevation | seeded in M1, then monthly |
+| Runways | OurAirports `runways.csv` | Public domain | Runway headings for wind components | seeded in M1, then monthly |
 | Aircraft | OpenSky aircraft database CSV | Non-commercial use with attribution, like the API; the exact licence text is recorded here in M3 | icao24 → registration, typecode, operator | monthly |
 | Airlines | OpenFlights `airlines.dat` | ODbL 1.0 (attribution in README) | Callsign prefix → airline name | monthly |
 | Countries | Natural Earth admin-0, 1:50m | Public domain | `over_country` for the chat; place names in briefings | monthly |
 | H3 grid | `h3` Python library | Apache 2.0 | Cell ids, boundaries | n/a |
+
+Airports and runways are loaded in M1 by the seed loader `db/seeds/ourairports.py` (downloads both CSVs, upserts on the primary key, safe to re-run), because go-around detection in M2 needs the target airports' elevations. From M3, `ref_refresh` keeps them current. The other datasets are first loaded by `ref_refresh` in M3.
 
 ## Target airports
 

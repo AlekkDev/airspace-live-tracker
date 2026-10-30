@@ -2,7 +2,7 @@
 
 This is the boundary between backend and frontend work. Change it here first, then in code. FastAPI's generated spec at `/api/v1/openapi.json` must match this document.
 
-- Base URLs: `https://api.<domain>/api/v1` (public), `https://ingest.<domain>/ingest/v1` (collectors). `<domain>` is open decision O5 ([10](10-roadmap.md#open-decisions)).
+- Base URLs: `https://api.<domain>/api/v1` (public), `https://ingest.<domain>/ingest/v1` (collectors). `<domain>` is open decision O5 ([10](10-roadmap.md#open-decisions)). While the project is private, collectors use `http://airspace-vm:8000/ingest/v1` over the tailnet, which encrypts the traffic ([D3](11-tasks.md#decided-while-building)).
 - JSON, UTF-8. Timestamps are ISO-8601 UTC with `Z`. Units are SI.
 - Errors: `{"error": {"code": "string", "message": "string"}}` with a matching HTTP status.
 - **CORS** (public API only): allowed origins `https://<domain>` and `https://*.<pages-project>.pages.dev` (Cloudflare Pages previews); methods `GET, POST`; header `Content-Type`; no credentials.
@@ -28,7 +28,7 @@ The latest snapshot ([04](04-pipelines.md#shared-definitions)). Optional `bbox=m
 - `alt_m` is `baro_altitude_m` (pressure altitude), the value used for the altitude colour bands.
 - `pos_age_s` = `snapshot_time − time_position` in whole seconds; `null` when `time_position` is null.
 - States without lat/lon are omitted.
-- `next_expected_at` = the latest snapshot's `snapshot_time` + 45 s.
+- `next_expected_at` = the latest snapshot's `snapshot_time` + 90 s.
 - ~10k aircraft is about 650 KB, ~160 KB gzipped.
 
 ### `GET /live/stream` (Server-Sent Events)
@@ -161,7 +161,7 @@ Flight list (one two-hour window):
 ```json
 {
   "batch_id": "0192f0c5-...",
-  "collector_id": "pc-alek",
+  "collector_id": "pc-daniel",
   "query": { "kind": "flights_all", "begin": "2026-11-02T00:00:00Z", "end": "2026-11-02T02:00:00Z" },
   "requested_at": "2026-11-03T06:00:04.512Z",
   "http_status": 200,
