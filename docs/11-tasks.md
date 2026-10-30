@@ -16,8 +16,9 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | `libs/airspace_common` | `settings.py` (collector settings), `timefmt.py` (`iso_z`), `log.py` (structlog JSON) |
 | Collector v0 | State-vector loop on the 90 s grid, OAuth2 token handling, atomic spool writes, failure handling (retry, 429 back-off, failed envelopes), daily flight-list task with restart-safe progress, single-instance lock, `status` command. 38 tests |
 | Collection | **pc-daniel collecting since 2026-10-29 16:07 UTC**, spool-only (`UPLOAD_ENABLED=false`), as the scheduled task `airspace-collector` |
-| Server | Oracle A1 VM `airspace-vm` (Frankfurt, 2 OCPU, 12 GB, 200 GB) with Docker and Tailscale, created 2026-10-30. No inbound ports open to the internet. No project services on it yet |
-| Not started | Database, ingest and public APIs, stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
+| Server | Oracle A1 VM `airspace-vm` (Frankfurt, 2 OCPU, 12 GB, 200 GB) with Docker and Tailscale, created 2026-10-30. No inbound ports open to the internet. Runs the database and ingest-api |
+| Pipeline | pc-daniel uploads to ingest-api on the VM over Tailscale; batches land in TimescaleDB |
+| Not started | Public API, stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
 
 ## Open questions found while building
 
@@ -65,9 +66,9 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | M1.3 | `infra/compose.yml` and `compose.dev.yml`; pinned `timescaledb-ha` image (TimescaleDB ≥ 2.19) | A | ✅ | `pg16.15-ts2.30.2`. Database running on the VM since 2026-10-30; files copied by hand until M1.15 |
 | M1.4 | Migrations: schemas, roles, `ops`, `raw` (no compression policy), `ref`, `core`, `agg`, `ml`, `llm` ([03](03-data-model.md)) | A | ✅ | `agg.traffic_h3_15m` and `agg.coverage_15m` come with M1.10; `llm.v_*` with the chat. Open for M2: `stream_worker` has no INSERT on `ops.stream_state`, so its first row needs a decision |
 | M1.5 | CI migration test, including the compressed-chunk `ON CONFLICT` test (timescaledb#7672) | A | 🟡 | `infra/test-db.sh` and `db/tests/test_schema.sql` pass on the VM; CI wiring comes with M1.14 |
-| M1.6 | ingest-api `POST /ingest/v1/batches` ([05](05-api-contract.md#post-ingestv1batches)) | A | ⬜ | |
-| M1.7 | Admin CLI `add-collector` (argon2id key hash) | A | ⬜ | |
-| M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ⬜ | v0 logs a warning if upload is enabled |
+| M1.6 | ingest-api `POST /ingest/v1/batches` ([05](05-api-contract.md#post-ingestv1batches)) | A | ✅ | Running on the VM since 2026-10-30, built there by hand until M1.15. `infra/test-db.sh` covers it end to end |
+| M1.7 | Admin CLI `add-collector` (argon2id key hash) | A | ✅ | Run through the `ingest-admin` compose service |
+| M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ✅ | Enabled on pc-daniel 2026-10-30 |
 | M1.9 | Drain the M0 backlog | A | ⬜ | |
 | M1.10 | `agg.traffic_h3_15m`, `agg.coverage_15m`, `agg_backfill_refresh` | A | ⬜ | |
 | M1.11 | Compression-policy migration, merged after the drain | A | ⬜ | |

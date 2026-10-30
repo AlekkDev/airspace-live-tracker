@@ -29,3 +29,19 @@ class CollectorSettings(BaseSettings):
         if value not in (0, 45):
             raise ValueError("OFFSET_SECONDS must be 0 (pc-daniel) or 45 (pc-alek)")
         return value
+
+
+class IngestSettings(BaseSettings):
+    """P2 ingest-api (docs/04-pipelines.md#p2--ingest), connecting as `ingest_writer`."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    database_url: SecretStr
+
+
+class AdminSettings(BaseSettings):
+    """Ingest admin CLI, connecting as `airspace_owner`."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    admin_database_url: SecretStr

@@ -14,6 +14,7 @@ from collector.opensky import OpenSky, TokenProvider
 from collector.spool import Spool
 from collector.states import run_states
 from collector.status import format_summary, spool_summary
+from collector.uploader import run_uploader
 
 log = structlog.get_logger()
 
@@ -29,11 +30,6 @@ async def run(settings: CollectorSettings) -> None:
         flight_lists_enabled=settings.flight_lists_enabled,
         spool_dir=str(settings.spool_dir.resolve()),
     )
-    if settings.upload_enabled:
-        log.warning(
-            "uploader_not_built",
-            detail="v0 is spool-only; batches stay in spool/pending until the M1 uploader exists",
-        )
     spool = Spool(settings.spool_dir)
     async with httpx.AsyncClient() as client:
         tokens = TokenProvider(
@@ -43,6 +39,13 @@ async def run(settings: CollectorSettings) -> None:
         jobs = [run_states(settings, opensky, spool)]
         if settings.flight_lists_enabled:
             jobs.append(run_flight_lists(opensky, spool, settings.collector_id))
+        if settings.upload_enabled:
+            if settings.ingest_url and settings.ingest_api_key:
+                key = settings.ingest_api_key.get_secret_value()
+                jobs.append(run_uploader(client, settings.ingest_url, key, spool))
+            else:
+                # Collecting matters more than uploading, so this does not stop the collector.
+                log.error("upload_not_configured", detail="set INGEST_URL and INGEST_API_KEY")
         await asyncio.gather(*jobs)
 
 

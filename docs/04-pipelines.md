@@ -55,12 +55,12 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 4. Wrap the result in a batch envelope ([05](05-api-contract.md#post-ingestv1batches)) with a new UUIDv7 `batch_id` (`uuid6.uuid7()`), `requested_at`, status and headers. Write it atomically to `spool/pending/<batch_id>.json.gz` (write `.tmp`, then rename). **The data is safe from this point.** Failed requests are spooled too, with `response = null`.
 5. The uploader task sends pending files oldest-first and moves each to `spool/sent/` after a 2xx.
 
-**Flight-list task** (`FLIGHT_LISTS_ENABLED=true` on both collectors)
+**Flight-list task** (`FLIGHT_LISTS_ENABLED=true`)
 1. At 06:00 UTC, for yesterday (UTC), request `GET /api/flights/all?begin=&end=` for 12 two-hour windows `[00:00, 02:00) … [22:00, 24:00)`.
 2. Each response becomes one batch with `query_kind = flights_all`, spooled and uploaded like state vectors.
 3. HTTP 404 or an empty array means the nightly data is not ready: retry that window every hour until 18:00 UTC, then give up and upload the failed envelope.
 4. HTTP 400 for an interval that is too long: split the window into two halves and retry, down to 30-minute windows.
-5. Both collectors fetch the same windows; the server keeps one copy of each flight (primary key) and both batches are recorded.
+5. The server keeps one copy of each flight (primary key), so fetching a window twice is harmless.
 
 **Failure handling**
 
@@ -72,7 +72,7 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 | Ingest unreachable or 5xx | Files stay in `pending/`; exponential backoff from 5 s to 5 min; drain oldest-first on recovery |
 | Ingest 401 | Stop uploading, keep spooling, log an ERROR every 5 min, retry one upload every 5 min |
 | Ingest 422 | Move the file to `spool/rejected/` and log an ERROR. Never retried automatically |
-| PC off | Gap, visible in `ops.ingest_batches`, Grafana and a `collector_gap` event. The other collector keeps its own 90 s grid |
+| PC off | Gap, visible in `ops.ingest_batches`, Grafana and a `collector_gap` event. |
 | Clock skew | `snapshot_time` comes from OpenSky. `requested_at` is only used for slot and lag metrics |
 
 **Spool layout:** `spool/pending/`, `spool/sent/`, `spool/rejected/`, `spool/archive/`, plus `spool/state/` (flight-list progress per day, so a restart neither repeats nor skips windows; kept 7 days), `spool/logs/collector.log` (JSON lines, rotated at 10 MB × 5) and `spool/collector.lock` (one collector per spool; a second process refuses to start, because it would double credit use).
@@ -93,7 +93,7 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 2. If `batch_id` exists in `ops.ingest_batches`, return `200 {"status":"duplicate"}`.
 3. Validate the envelope with Pydantic (422 on failure). Normalise each row:
    - `states_global`: trim callsign (empty → NULL), lower-case `icao24`, unix seconds → `timestamptz`; reject rows with lat ∉ [−90, 90], lon ∉ [−180, 180] or a non-hex `icao24`, counting them in `n_rejected`. Compute `h3_r4` where lat/lon are set.
-   - `flights_all`: same trimming and casing; reject rows without `icao24` or `firstSeen`.
+   - `flights_all`: same trimming and casing; reject rows without `icao24`, `firstSeen` or `lastSeen`, or with a non-hex `icao24`.
 4. In one transaction:
    - `COPY` the rows into a temp table, then `INSERT INTO raw.state_vectors` (or `raw.opensky_flights`) `… ON CONFLICT DO NOTHING`.
    - Insert the `ops.ingest_batches` row. `snapshot_time` is set only for a successful `states_global` batch.
