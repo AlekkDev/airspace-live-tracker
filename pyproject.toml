@@ -3,10 +3,10 @@ name = "airspace-live-tracker"
 version = "0.1.0"
 description = "Workspace root: installs every Python package for local development and CI."
 requires-python = ">=3.12,<3.13"
-dependencies = ["airspace-common", "airspace-collector"]
+dependencies = ["airspace-common", "airspace-collector", "airspace-ingest"]
 
 [dependency-groups]
-dev = ["mypy>=1.13", "pytest>=8.3", "ruff>=0.8"]
+dev = ["httpx>=0.28", "mypy>=1.13", "pytest>=8.3", "ruff>=0.8"]
 
 [tool.uv]
 package = false
@@ -14,9 +14,10 @@ package = false
 [tool.uv.sources]
 airspace-common = { workspace = true }
 airspace-collector = { workspace = true }
+airspace-ingest = { workspace = true }
 
 [tool.uv.workspace]
-members = ["collector", "libs/airspace_common"]
+members = ["collector", "libs/airspace_common", "services/ingest"]
 
 [tool.ruff]
 line-length = 100
@@ -26,10 +27,10 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["airspace_common", "collector"]
+known-first-party = ["airspace_common", "collector", "ingest"]
 
 [tool.pytest.ini_options]
-testpaths = ["collector/tests", "libs/airspace_common/tests"]
+testpaths = ["collector/tests", "libs/airspace_common/tests", "services/ingest/tests"]
 
 [tool.mypy]
 strict = true

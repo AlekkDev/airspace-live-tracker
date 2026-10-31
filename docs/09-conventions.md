@@ -36,6 +36,7 @@ airspace-live-tracker/
 |---|---|
 | Python | 3.12, **uv** workspace (`collector`, `services/*`, `ml`, `libs/*`), ruff (lint + format), pytest, mypy on `libs/`. UUIDv7 via the `uuid6` package (`uuid6.uuid7()`) |
 | JS | Node 24 LTS, **pnpm**, TypeScript strict, ESLint, Prettier, Vitest |
+| DB access | **psycopg 3** with `psycopg_pool`; argon2id via `argon2-cffi` |
 | DB migrations | **dbmate**, plain SQL, forward-only. Every migration runs in CI against the pinned Timescale image |
 | Containers | One Dockerfile per service, multi-stage, non-root user, built for `linux/amd64` and `linux/arm64`; images `ghcr.io/<org>/airspace-<service>` |
 | Local dev | `docker compose -f infra/compose.yml -f infra/compose.dev.yml up` starts the full stack with the fixture database |

@@ -45,5 +45,30 @@ services:
       - ../db:/db:ro
     command: up
 
+  ingest-api:
+    image: airspace-ingest:local
+    build:
+      context: ..
+      dockerfile: services/ingest/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://ingest_writer:${INGEST_WRITER_PASSWORD:?}@db:5432/airspace?sslmode=disable
+    ports:
+      # Local only. `tailscale serve` exposes it to the tailnet (docs/01-architecture.md).
+      - "127.0.0.1:${INGEST_HOST_PORT:-8000}:8000"
+
+  ingest-admin:
+    image: airspace-ingest:local
+    profiles: [tools]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMIN_DATABASE_URL: postgres://airspace_owner:${AIRSPACE_OWNER_PASSWORD:?}@db:5432/airspace?sslmode=disable
+    entrypoint: ["python", "-m", "ingest.admin"]
+
 volumes:
   db-data:

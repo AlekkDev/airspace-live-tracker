@@ -185,3 +185,7 @@ Flight list (one two-hour window):
 | 413 | error (body > 20 MB) | move to `spool/rejected/` |
 | 422 | error (invalid envelope) | move to `spool/rejected/` |
 | 5xx | error | retry with backoff |
+
+### `GET /healthz`
+
+`{"status":"ok"}` when ingest-api can reach the database. Used by the container health check.

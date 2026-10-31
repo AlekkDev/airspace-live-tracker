@@ -83,7 +83,8 @@ VM
     ├── caddy               :443 → api.<domain>, ingest.<domain>, grafana.<domain>
     ├── db                  no published port
     ├── migrate             one-off: dbmate up
-    ├── ingest-api, public-api, stream-worker
+    ├── ingest-api          127.0.0.1:8000 → tailscale serve while private (D3)
+    ├── public-api, stream-worker
     ├── dagster-webserver   127.0.0.1:3000 → tailscale serve
     ├── dagster-daemon, dagster-code
     ├── mlflow              127.0.0.1:5000 → tailscale serve
