@@ -6,7 +6,7 @@ A live world map of aircraft, with predictions and an AI assistant on top. We co
 
 ## How it works
 
-1. **Collect:** a home PC fetches the position of every aircraft OpenSky can see, every 90 seconds, and saves each response locally before uploading it. It runs at home because OpenSky blocks requests from data centres.
+1. **Collect:** a computer at home fetches the position of every aircraft OpenSky can see, every 90 seconds, and saves each response locally before uploading it. It runs at home because OpenSky blocks requests from data centres.
 2. **Process:** a cloud server stores the positions, works out flights, spots unusual traffic and predicts arrivals.
 3. **Show:** a website with the live map, an arrival board, an alert feed, an AI summary and an AI chat.
 

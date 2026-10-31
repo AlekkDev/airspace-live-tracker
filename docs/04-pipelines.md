@@ -45,8 +45,8 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 ## P1 · Collector
 
 **Where it runs**
-- **Windows PC (now):** a Python 3.12 process (`uv run -m collector`) registered in Windows Task Scheduler: trigger *At startup*, *Run whether user is logged on or not*, restart every 1 min on failure (999 attempts), no time limit. Windows power plan: never sleep while plugged in. Docker Desktop is not used on Windows because it only starts after a user signs in.
-- **Dedicated Linux device (once approved, [10](10-roadmap.md#open-decisions)):** the multi-arch Docker image with Docker Engine and `restart: unless-stopped`.
+- **Windows PC (until the Raspberry Pi takes over):** a Python 3.12 process (`uv run -m collector`) registered in Windows Task Scheduler: trigger *At startup*, *Run whether user is logged on or not*, restart every 1 min on failure (999 attempts), no time limit. Windows power plan: never sleep while plugged in. Docker Desktop is not used on Windows because it only starts after a user signs in.
+- **Raspberry Pi (planned, not set up yet, [D5](11-tasks.md#decided-while-building)):** runs 24/7 on a 64-bit OS with the arm64 Docker image, Docker Engine and `restart: unless-stopped`.
 
 **State-vector loop**
 1. Next slot: `next = ceil(now / CADENCE_SECONDS) × CADENCE_SECONDS`. Sleep until then. The clock is NTP-synced.

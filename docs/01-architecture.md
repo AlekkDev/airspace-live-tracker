@@ -52,7 +52,7 @@ flowchart LR
 
 | Component | Runs on | Responsibility | Tech |
 |---|---|---|---|
-| **collector** | Home PC (Windows Task Scheduler); later a dedicated Linux device | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
+| **collector** | Home PC (Windows Task Scheduler) until the Raspberry Pi takes over | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
 | **ingest-api** | VM | Authenticate the collector, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, asyncpg |
 | **db** | VM | System of record | PostgreSQL 16, TimescaleDB ≥ 2.19, PostGIS |
 | **stream-worker** | VM | Per-snapshot work on live snapshots: squawk and go-around events, ETA inference | Python, `LISTEN/NOTIFY` |
@@ -125,7 +125,7 @@ Daily `backup` job ([04](04-pipelines.md#backup)) to Cloudflare R2 `airspace-bac
 - `dagster` and `mlflow`,
 - the `mlflow-artifacts` volume.
 
-The collector copies its Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of a home PC.
+The collector copies its Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of the collector device.
 
 ## Sizing
 
@@ -148,7 +148,7 @@ These are estimates. M0 measures real row counts and Parquet sizes from the spoo
 | Claude API (Haiku; briefing ~$1.50, chat ~$0.005/question, capped) | $2–8 typical, ≤ $40 hard limit |
 | Domain | ~€1 |
 | Cloudflare DNS/Pages, GitHub, GHCR, Tailscale | €0 |
-| Electricity for one home PC (estimate, 50–100 W) | €4–25; < €2 on a dedicated low-power device |
+| Electricity for the collector (estimate) | < €2 on the Raspberry Pi; €4–25 for a home PC at 50–100 W if left on |
 | **Total** | **€5–15 plus electricity** |
 
 ## Later: Level 2 (out of scope)

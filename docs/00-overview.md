@@ -54,7 +54,7 @@ These are permanent for Level 1. The product works around them and says so.
 | Aircraft don't broadcast destinations | Destinations are estimates; diversions show late | Top-3 with probabilities, labelled "estimate" |
 | No schedules or air-traffic-control data | Far-out ETAs can't foresee holding or runway changes | Wider p10–p90 ranges |
 | OpenSky's daily API quota | No faster global polling | One collector, 90 s refresh ([D4](11-tasks.md#decided-while-building)) |
-| Collection depends on home internet | Gaps happen | Shown openly; reduced by a dedicated low-power device |
+| Collection depends on home internet | Gaps happen | Shown openly; reduced by a Raspberry Pi running 24/7 |
 | Text-to-SQL is never 100% correct | Some wrong answers | SQL always shown; 80% eval target |
 
 ## Non-goals
