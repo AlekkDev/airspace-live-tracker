@@ -2,7 +2,7 @@
 
 This is the boundary between backend and frontend work. Change it here first, then in code. FastAPI's generated spec at `/api/v1/openapi.json` must match this document.
 
-- Base URLs: `https://api.<domain>/api/v1` (public), `https://ingest.<domain>/ingest/v1` (collectors). `<domain>` is open decision O5 ([10](10-roadmap.md#open-decisions)). While the project is private, collectors use `http://airspace-vm:8000/ingest/v1` over the tailnet, which encrypts the traffic ([D3](11-tasks.md#decided-while-building)).
+- Base URLs: `https://api.<domain>/api/v1` (public), `https://ingest.<domain>/ingest/v1` (collector). `<domain>` is open decision O5 ([10](10-roadmap.md#open-decisions)). While the project is private, the collector uses `http://airspace-vm:8000/ingest/v1` over the tailnet, which encrypts the traffic ([D3](11-tasks.md#decided-while-building)).
 - JSON, UTF-8. Timestamps are ISO-8601 UTC with `Z`. Units are SI.
 - Errors: `{"error": {"code": "string", "message": "string"}}` with a matching HTTP status.
 - **CORS** (public API only): allowed origins `https://<domain>` and `https://*.<pages-project>.pages.dev` (Cloudflare Pages previews); methods `GET, POST`; header `Content-Type`; no credentials.
@@ -17,7 +17,7 @@ The latest snapshot ([04](04-pipelines.md#shared-definitions)). Optional `bbox=m
 ```json
 {
   "snapshot_time": "2026-11-03T14:31:30Z",
-  "next_expected_at": "2026-11-03T14:32:15Z",
+  "next_expected_at": "2026-11-03T14:33:00Z",
   "fields": ["icao24","callsign","lon","lat","alt_m","vel_ms","track_deg","vrate_ms","on_ground","category","squawk","pos_age_s"],
   "states": [
     ["4b1805","SWR283",16.12,48.02,10363.2,231.4,92.1,0.0,false,4,"2331",2]
@@ -125,9 +125,9 @@ The global count comes from `llm.chat_log`; the per-IP count is in public-api me
 
 ### `GET /stats`
 
-`{"aircraft_now": 9412, "snapshot_time": "...", "collectors_online": 2, "rows_today": 8123456, "dq_status": "pass"}`
+`{"aircraft_now": 9412, "snapshot_time": "...", "collector_online": true, "rows_today": 8123456, "dq_status": "pass"}`
 
-- `collectors_online`: collectors with a successful batch in the last 3 min.
+- `collector_online`: the collector has a successful batch in the last 3 min.
 - `rows_today`: sum of `n_inserted` for batches received since 00:00 UTC.
 - `dq_status`: worst status among the latest result of each check.
 

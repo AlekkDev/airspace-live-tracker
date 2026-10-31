@@ -4,8 +4,8 @@
 
 ```mermaid
 flowchart LR
-  subgraph Home["Home (residential IPs)"]
-    C1["Collector pc-daniel<br/>offset 0 s"]
+  subgraph Home["Home (residential IP)"]
+    C1["Collector pc-daniel"]
     S1[("Spool + Parquet archive")]
     C1 --- S1
   end
@@ -52,8 +52,8 @@ flowchart LR
 
 | Component | Runs on | Responsibility | Tech |
 |---|---|---|---|
-| **collector** | Home PCs (Windows Task Scheduler); later a dedicated Linux device | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
-| **ingest-api** | VM | Authenticate collectors, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, asyncpg |
+| **collector** | Home PC (Windows Task Scheduler); later a dedicated Linux device | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
+| **ingest-api** | VM | Authenticate the collector, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, asyncpg |
 | **db** | VM | System of record | PostgreSQL 16, TimescaleDB ≥ 2.19, PostGIS |
 | **stream-worker** | VM | Per-snapshot work on live snapshots: squawk and go-around events, ETA inference | Python, `LISTEN/NOTIFY` |
 | **orchestrator** | VM | Scheduled, windowed jobs ([04](04-pipelines.md#p4--orchestrated-jobs)) | Dagster (webserver, daemon, code location) |
@@ -65,7 +65,7 @@ flowchart LR
 
 ## Why the collector runs at home
 
-OpenSky blocks or throttles data-centre IPs. Collectors run on residential connections and **push** to the server; the server never calls OpenSky ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
+OpenSky blocks or throttles data-centre IPs. The collector runs on a residential connection and **pushes** to the server; the server never calls OpenSky ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
 
 One collector polls on a 90 s grid, so the map refreshes every 90 s ([D4](11-tasks.md#decided-while-building)). It computes its slots from its NTP-synced clock.
 
@@ -103,20 +103,20 @@ VM
 
 ## Networking and security
 
-**While the project is private ([D3](11-tasks.md#decided-while-building)):** no inbound ports are open to the internet. Collectors upload to ingest-api over the tailnet, using `tailscale serve` as for Dagster, and Cloudflare, Caddy and port 443 are not set up. The table below is the target state, and every item in it is in place before a public URL is shared.
+**While the project is private ([D3](11-tasks.md#decided-while-building)):** no inbound ports are open to the internet. The collector uploads to ingest-api over the tailnet, using `tailscale serve` as for Dagster, and Cloudflare, Caddy and port 443 are not set up. The table below is the target state, and every item in it is in place before a public URL is shared.
 
 | Concern | Decision |
 |---|---|
 | DNS and edge | `<domain>` on Cloudflare. `api`, `ingest`, `grafana` are proxied records; SSL mode Full (strict) |
 | TLS at the origin | Caddy uses a Cloudflare Origin CA certificate (installed once, not in git) |
 | Firewall | OCI security list: TCP 443 inbound only from Cloudflare's published IP ranges. Port 22 is closed to the internet; SSH only over Tailscale |
-| Collector auth | One random key per collector, sent as `Authorization: Bearer`, stored only as an argon2id hash in `ops.collectors`. Created with `python -m ingest.admin add-collector`, which prints the key once |
+| Collector auth | A random key, sent as `Authorization: Bearer`, stored only as an argon2id hash in `ops.collectors`. Created with `python -m ingest.admin add-collector`, which prints the key once |
 | DB exposure | No published port. Admin access: SSH over Tailscale, then `docker compose exec db psql` |
 | DB roles | Least privilege per service ([03](03-data-model.md#roles)) |
 | Rate limits | Cloudflare rate-limiting rule on `api.<domain>/api/v1/*`: 60 requests per 10 s per IP. Chat limits in public-api ([05](05-api-contract.md#post-chat)). Anthropic console spend limit $40/month |
 | Grafana | Anonymous access disabled. Public dashboards are *externally shared dashboards*, which run only their own saved queries. `grafana_reader` sees views without key hashes and has a 10 s statement timeout |
 | Dagster, MLflow | Not routed by Caddy; reachable only on the tailnet |
-| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: Tailscale OAuth client, deploy SSH key, GHCR token, Anthropic key for the eval. Each collector's `.env`: its OpenSky client, ingest key and R2 credentials |
+| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: Tailscale OAuth client, deploy SSH key, GHCR token, Anthropic key for the eval. The collector's `.env`: its OpenSky client, ingest key and R2 credentials |
 
 ## Backups
 
@@ -125,13 +125,13 @@ Daily `backup` job ([04](04-pipelines.md#backup)) to Cloudflare R2 `airspace-bac
 - `dagster` and `mlflow`,
 - the `mlflow-artifacts` volume.
 
-The collectors copy their Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of a home PC.
+The collector copies its Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of a home PC.
 
 ## Sizing
 
 | Item | Estimate | Basis |
 |---|---|---|
-| State vectors | ~11M rows/day | 1 collector × 960 snapshots × ~11.6k aircraft (spool sample, 2026-10) |
+| State vectors | ~11M rows/day | 960 snapshots × ~11.6k aircraft (spool sample, 2026-10) |
 | Raw size | ~3 GB/day uncompressed, ~0.3 GB/day compressed | ~250–300 bytes/row with 2 indexes; ~10× compression |
 | Raw at 90 days | ~30–35 GB | 2 uncompressed days + 88 compressed days |
 | Everything else | < 15 GB | predictions with retention, flight lists, aggregates |

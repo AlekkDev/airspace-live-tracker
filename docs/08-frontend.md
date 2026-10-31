@@ -12,7 +12,7 @@ Basemap: CARTO *Dark Matter* (free for non-commercial use, with attribution). Se
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ ◆ Airspace Monitor   9,412 aircraft · snapshot 34 s ago · 2/2 collectors │
+│ ◆ Airspace Monitor 9,412 aircraft · snapshot 34 s ago · collector online │
 ├───────────────────────────────────────────────┬──────────────────────────┤
 │  [Aircraft] [Anomalies] [Airports]  layers    │ Briefing │ Ask │ Arrivals │ Events │
 │                                               │                          │

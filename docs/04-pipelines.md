@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TB
   subgraph P1["P1 Collector (home)"]
-    T["slot tick every 90 s at offset"] --> F["GET /states/all"]
+    T["slot tick every 90 s"] --> F["GET /states/all"]
     FL["daily 06:00 UTC"] --> FA["GET /flights/all (yesterday, 12 windows)"]
     F --> W["spool/pending/&lt;batch_id&gt;.json.gz"]
     FA --> W
@@ -40,16 +40,16 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
   3. Else if `geo_altitude_m` is set: `geo_altitude_m − elevation_m`. Method `geo`.
   4. Else: unknown; rules that need a height do not fire.
 - **Inbound candidate for an ETA** (target airport A): the aircraft is airborne, has a `flight_id`, is within 400 km great-circle of A, its `true_track_deg` is within 30° of the bearing to A, and either `vertical_rate_ms ≤ −2` in at least one of its last 3 observations or `baro_altitude_m ≤ 7,000`. Overflights cruising above 7,000 m without descending are not candidates. Destination predictions play no part.
-- **Watermark** (for finalising flights): `min(now() − 10 min, min over collectors with a successful batch in the last 30 min of their latest snapshot_time)`. A collector silent for more than 30 min stops holding the watermark back.
+- **Watermark** (for finalising flights): `min(now() − 10 min, latest successful snapshot_time)`. While the collector is silent the watermark holds, so an outage never finalises flights as lost before the backlog has arrived.
 
 ## P1 · Collector
 
 **Where it runs**
-- **Windows PCs (now):** a Python 3.12 process (`uv run -m collector`) registered in Windows Task Scheduler: trigger *At startup*, *Run whether user is logged on or not*, restart every 1 min on failure (999 attempts), no time limit. Windows power plan: never sleep while plugged in. Docker Desktop is not used on Windows because it only starts after a user signs in.
+- **Windows PC (now):** a Python 3.12 process (`uv run -m collector`) registered in Windows Task Scheduler: trigger *At startup*, *Run whether user is logged on or not*, restart every 1 min on failure (999 attempts), no time limit. Windows power plan: never sleep while plugged in. Docker Desktop is not used on Windows because it only starts after a user signs in.
 - **Dedicated Linux device (once approved, [10](10-roadmap.md#open-decisions)):** the multi-arch Docker image with Docker Engine and `restart: unless-stopped`.
 
 **State-vector loop**
-1. Next slot: `next = ceil((now − OFFSET_SECONDS) / CADENCE_SECONDS) × CADENCE_SECONDS + OFFSET_SECONDS`. Sleep until then. The clock is NTP-synced.
+1. Next slot: `next = ceil(now / CADENCE_SECONDS) × CADENCE_SECONDS`. Sleep until then. The clock is NTP-synced.
 2. Ensure a valid OAuth token; refresh when fewer than 60 s of `expires_in` remain.
 3. `GET /api/states/all?extended=1`, timeout 20 s.
 4. Wrap the result in a batch envelope ([05](05-api-contract.md#post-ingestv1batches)) with a new UUIDv7 `batch_id` (`uuid6.uuid7()`), `requested_at`, status and headers. Write it atomically to `spool/pending/<batch_id>.json.gz` (write `.tmp`, then rename). **The data is safe from this point.** Failed requests are spooled too, with `response = null`.
@@ -84,7 +84,7 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 **Spool-only mode:** `UPLOAD_ENABLED=false`, used from M0 before the server exists. When the server is live, set it to `true`; the uploader drains `pending/` (see [Catch-up](#catch-up-after-an-outage-or-the-m0-backlog)).
 
 **Config (env, documented in `.env.example`):**
-`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `OFFSET_SECONDS` (`0` on pc-daniel), `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=90`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
+`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=90`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
 
 ## P2 · Ingest
 
@@ -171,7 +171,7 @@ Find successful `states_global` batches received in the last 65 min whose `snaps
 
 ### `collector_gap_check`
 
-For each enabled collector, a gap is a run of ≥ 4 consecutive slots (`requested_at` on its 90 s grid) without a successful `states_global` batch. Insert one `collector_gap` event per gap at its first missed slot.
+A gap is a run of ≥ 4 consecutive slots (`requested_at` on the 90 s grid) without a successful `states_global` batch. Insert one `collector_gap` event per gap at its first missed slot.
 
 ### `backup`
 
@@ -179,7 +179,7 @@ For each enabled collector, a gap is a run of ≥ 4 consecutive slots (`requeste
 2. `pg_dump -Fc dagster` and `pg_dump -Fc mlflow`.
 3. `rclone copy` the three dumps and the `mlflow-artifacts` volume to R2 `airspace-backup/YYYY-MM-DD/`. Keep the 14 newest days.
 
-**Restore:** create the databases, `SELECT timescaledb_pre_restore();`, `pg_restore`, `SELECT timescaledb_post_restore();`, then replay the collectors' R2 archives with `collector.replay` ([below](#idempotency-and-replays)). Do not refresh the continuous aggregate before the raw data is back.
+**Restore:** create the databases, `SELECT timescaledb_pre_restore();`, `pg_restore`, `SELECT timescaledb_post_restore();`, then replay the collector's R2 archives with `collector.replay` ([below](#idempotency-and-replays)). Do not refresh the continuous aggregate before the raw data is back.
 
 ## Catch-up after an outage or the M0 backlog
 
@@ -200,15 +200,15 @@ For each enabled collector, a gap is a run of ≥ 4 consecutive slots (`requeste
 
 | Check | Rule (over the last hour unless stated) | Status |
 |---|---|---|
-| `slot_coverage` | Per collector: share of its 40 slots with a successful `states_global` batch | warn < 95%, fail < 80% |
-| `snapshot_gap` | Largest gap between consecutive successful global snapshots from any collector | warn > 120 s, fail > 300 s |
+| `slot_coverage` | Share of the 40 slots with a successful `states_global` batch | warn < 95%, fail < 80% |
+| `snapshot_gap` | Largest gap between consecutive successful global snapshots | warn > 120 s, fail > 300 s |
 | `ingest_lag` | p95 `late_seconds` of live batches | warn > 30 s |
 | `null_position_rate` | Share of state vectors without lat/lon | warn > 10% |
 | `aircraft_count_range` | Latest snapshot has 3,000–20,000 states | fail outside |
 | `physical_bounds` | Rows with altitude ∉ [−500, 20,000] m or velocity > 400 m/s | warn > 0.1% |
 | `staleness` | Median `snapshot_time − last_contact` | warn > 30 s |
-| `credits_remaining` | Per collector: projected credits left at 00:00 UTC at the current rate | warn < 0 |
-| `flight_lists_loaded` | Daily at 19:00: yesterday has 12 successful `flights_all` windows from at least one collector | fail otherwise |
+| `credits_remaining` | Projected quota left at 00:00 UTC at the current rate | warn < 0 |
+| `flight_lists_loaded` | Daily at 19:00: yesterday has 12 successful `flights_all` windows | fail otherwise |
 
 Grafana shows them as a traffic-light table. Every `fail` also inserts a `dq_fail` event.
 

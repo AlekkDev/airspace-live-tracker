@@ -5,7 +5,7 @@ The working task list for the whole application, by milestone ([10](10-roadmap.m
 Status: ✅ done · 🟡 in progress · ⬜ to do · ⛔ blocked (the note says on what).
 Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split); owners are open decision O1).
 
-*Last updated: 2026-10-30.*
+*Last updated: 2026-10-31.*
 
 ## What exists now
 
@@ -25,6 +25,22 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | # | Question | Why it matters |
 |---|---|---|
 | Q1 | The remaining decisions flagged in the 2026-10-29 decision review: chat as free text-to-SQL vs fixed query tools; single VM vs k3s or managed services; Oracle vs Contabo; Dagster vs cron; TimescaleDB as the only store | Each is cheaper to change now than after M1 |
+| Q2 | Zenodo record for the route fallback. DOI 10.5281/zenodo.3737101 (2019–2022, has `icao24`) has a non-commercial licence; 10.5281/zenodo.5815448 (2019–2021, anonymised aircraft) is CC BY 4.0. Routes only need `callsign`, `origin` and `destination` | Decide before M3.5; the README and [02](02-data-sources.md) cite the record in use |
+| Q3 | `flights_sessionizer` reads the last 30 min, so a backlog drained after an outage is never turned into flights without a manual `flights_rebuild` | With one home collector, outages will happen; those arrivals are lost as ETA labels |
+| Q4 | `ref.runways` primary key `(airport_icao, le_ident)` fails on OurAirports rows with empty identifiers | Breaks the M1.18 seed loader |
+| Q5 | CARTO basemap: raster tiles need an API key. Add the key, a tile budget and the Pages preview origins to [08](08-frontend.md) | Needed for M2 |
+| Q6 | A stream-worker outage over 10 min loses squawk and go-around events until someone runs `events_rebuild` | Add bounded catch-up on startup, or schedule the rebuild |
+| Q7 | `agg_backfill_refresh` only looks back 65 min | One failed run leaves late data unmaterialised for good |
+| Q8 | CORS preview origins need a regex or allow-list; `Access-Control-Allow-Origin` has no wildcard subdomains | [05](05-api-contract.md) reads as a literal `*.pages.dev` |
+| Q9 | What happens to `ml.anomalies` when late data changes a bucket: re-score or mark stale | The heatmap can disagree with the aggregate |
+| Q10 | A negative-result path for ETA: report MAE vs B0 and B1 and keep the model card even if B1 is not beaten | B1 is a strong baseline and the success criterion may not be met |
+| Q11 | Validate H3 resolution 4 against real traffic, or test 5 or 6 for Central Europe | A 1,770 km² cell may only show overflight patterns |
+| Q12 | Golden-set questions that depend on `now()` need a frozen fixture clock; `llm.v_live_aircraft` should respect the 10-minute live window or label stale answers | Flaky eval; stale answers presented as live |
+| Q13 | Dead reckoning with `pos_age_s = null`, and whether `H3HexagonLayer` can draw a dashed outline | Small but visible map bugs |
+| Q14 | OpenFlights is ODbL 1.0: check whether share-alike applies to our airline table, or use a CC0 list | Attribution alone may not be enough |
+| Q15 | A reference device and connection for the "< 3 s, 60 fps" criterion in [00](00-overview.md#success-criteria) | Otherwise it can't be tested |
+
+Q4–Q15 carry over the findings still open from the 2026-10-30 documentation review.
 
 ## Decided while building
 
@@ -32,29 +48,26 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 |---|---|---|
 | D1 | No off-PC copy of collected data before M1. Compaction and the R2 archive upload run on uploaded (`sent/`) files only, and move to M1 | Building an early archive path for ~2 weeks of risk is not worth it. Accepted risk: until the uploader runs, `spool/` is the only copy. Never run `git clean -x` in the repo and never move or delete `spool/` (decided 2026-10-29) |
 | D2 | OurAirports airports and runways are seeded in M1 (`db/seeds/ourairports.py`), not first loaded in M3 | Go-around detection (M2) needs target-airport elevations. One source of truth instead of hard-coded constants (decided 2026-10-29) |
-| D3 | While the project is private, the VM is reachable over Tailscale only and collectors upload over the tailnet. Cloudflare, the domain, Caddy and port 443 wait until before a public launch | Nothing is public yet, so nothing needs to be open to the internet or paid for. Supersedes the `ingest.<domain>` path until then (decided 2026-10-30) |
-| D4 | One collector on one OpenSky account (pc-daniel); the map refreshes every 90 s. A written OpenSky licence is requested before any public launch | OpenSky's terms forbid multiple accounts to get more requests (3(v)) and require a written licence for automated or live use (3(vi)). See [02](02-data-sources.md) (decided 2026-10-30) |
+| D3 | While the project is private, the VM is reachable over Tailscale only and the collector uploads over the tailnet. Cloudflare, the domain, Caddy and port 443 wait until before a public launch | Nothing is public yet, so nothing needs to be open to the internet or paid for. Supersedes the `ingest.<domain>` path until then (decided 2026-10-30) |
+| D4 | One collector (pc-daniel); the map refreshes every 90 s | One home PC keeps collection simple, 90 s fits the API quota, and the map moves smoothly between snapshots (decided 2026-10-30) |
 
 ## M0 · Foundations (weeks 0–1)
 
 | # | Task | Track | Status | Notes |
 |---|---|---|---|---|
 | M0.1 | Grounding docs and ADRs | both | ✅ | |
-| M0.2 | OpenSky account and API client (Daniel) | A | ✅ | Token verified 2026-10-29 |
-| M0.3 | OpenSky account and API client (Alek) | A | ⛔ | Dropped (D4) |
-| M0.4 | Read OpenSky's terms on using two accounts for one project | both | ✅ | Read 2026-10-29: not allowed (D4) |
+| M0.2 | OpenSky account and API client | A | ✅ | Token verified 2026-10-29 |
 | M0.5 | Decide O1 (track owners) | both | ⬜ | |
 | M0.6 | Decide O5 (name and domain); register the domain on Cloudflare | both | ⬜ | No longer blocks M1 (D3); needed before a public launch |
 | M0.7 | Python workspace, lint, type check, tests | A | ✅ | |
 | M0.8 | Collector v0 (loop, spool, failures, flight lists, lock, status) | A | ✅ | `collector/` |
 | M0.9 | Run the collector on pc-daniel as a scheduled task | A | ✅ | Task `airspace-collector` (S4U, at startup) since 2026-10-29. Keep Windows from sleeping on AC power |
-| M0.10 | Run the collector on pc-alek (`OFFSET_SECONDS=45`) | A | ⛔ | Dropped (D4) |
 | M0.13 | 48 h check: a spool file every 90 s on pc-daniel; yesterday's flight lists arrive | A | ⬜ | Due 2026-10-31 16:10 UTC |
 | M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | ⬜ | Rows/day from the spool now; Parquet sizes after M1.19. First hour: ~13,300 aircraft per snapshot, ~500 KB per gzipped spool file |
 | M0.15 | Request the Oracle A1 VM; order the Contabo fallback if none by the end of week 1 | A | ✅ | VM created 2026-10-30; no fallback needed. Check Cost Analysis shows 0 by 2026-11-01 |
 | M0.16 | Teammate review of the docs rewrite (pushed to `main` without a PR) | B | ⬜ | Commit `5ad79a1` |
 | M0.17 | Product owner decisions (core vs stretch, hosting, dropped items, data limits, collector device O7) | both | ⬜ | |
-| M0.18 | Verify the `/flights/all` credit cost and the Zenodo DOI ([02](02-data-sources.md)) | A | 🟡 | Credit cost measured 2026-10-29: exactly 30 per 2-hour window (360/day). Zenodo DOI still to check |
+| M0.18 | Verify the flight-list quota cost and the Zenodo DOI ([02](02-data-sources.md)) | A | ✅ | Quota measured 2026-10-29. DOI checked 2026-10-31: it is not CC BY (Q2) |
 | M0.19 | Collector Dockerfile (amd64 + arm64) | A | ⬜ | Only needed once O7 (dedicated device) is approved |
 
 ## M1 · Platform (weeks 1–2)
@@ -81,6 +94,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | M1.18 | OurAirports seed loader `db/seeds/ourairports.py` (`ref.airports`, `ref.runways`) | A | ⬜ | D2 |
 | M1.19 | Spool compaction to Parquet at 00:30 UTC (uploaded files only) | A | ⬜ | D1; after M1.8 |
 | M1.20 | R2 bucket `airspace-archive`, `rclone copy` at 01:00 UTC, local retention (`ARCHIVE_RETENTION_DAYS`, `RCLONE_REMOTE`) | A | ⬜ | D1; needs a Cloudflare account |
+| M1.21 | Remove the leftover collector offset: forward migration dropping `ops.collectors.offset_seconds`, `OFFSET_SECONDS` in settings and `.env.example`, `--offset` in the admin CLI | A | ⬜ | The docs already describe one collector on a plain 90 s grid. Harmless until then: the offset is 0 |
 
 ## M2 · Live map (weeks 2–4)
 
@@ -101,7 +115,6 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | # | Task | Track | Status | Notes |
 |---|---|---|---|---|
 | M3.1 | `ref_refresh`: airports, runways, aircraft, airlines, countries, H3 → country | A | ⬜ | Takes over the M1.18 seed for airports and runways |
-| M3.2 | Record the OpenSky aircraft-database licence in [02](02-data-sources.md#reference-data) | A | ⬜ | |
 | M3.3 | `flights_sessionizer` (watermark, boundaries, observed arrivals and departures) | A | ⬜ | |
 | M3.4 | `flight_labels_merge` | A | ⬜ | |
 | M3.5 | `routes_refresh` (OpenSky flight lists plus Zenodo fallback) | A | ⬜ | |

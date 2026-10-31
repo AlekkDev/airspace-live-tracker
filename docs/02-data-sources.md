@@ -4,21 +4,17 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 
 ## OpenSky Network
 
-**Server-side calls are not possible:** OpenSky blocks or throttles data-centre IP ranges, so every OpenSky request comes from a collector on a home connection ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
+**Server-side calls are not possible:** OpenSky blocks or throttles data-centre IP ranges, so every OpenSky request comes from the collector on a home connection ([ADR-0001](adr/0001-home-collectors-push-to-cloud.md)).
 
-**Accounts:** one personal account with one API client, used by pc-daniel. OpenSky's terms of use (read 2026-10-29) forbid multiple accounts to get more API requests (3(v)), and require a prior written licence for automated or live REST API use, even non-profit (3(vi)). A licence request is needed before any public launch.
+**Auth:** OAuth2 client credentials, handled by the collector.
 
-**Auth:** OAuth2 client credentials. Exchange `client_id` and `client_secret` at `https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token` for a bearer token and refresh it before `expires_in` runs out. Basic auth is not used.
-
-**Credits:** every endpoint except `/states/own` costs credits. There are separate daily buckets for `/states/*`, `/tracks/*` and `/flights/*`; each holds 4,000 credits for a standard user (8,000 for an active feeder) and resets at 00:00 UTC.
-
-**Licence:** free for research and non-commercial use; attribution required. The map footer always shows *"Data: The OpenSky Network, opensky-network.org"*.
+**Attribution:** the map footer always shows *"Data: The OpenSky Network, opensky-network.org"*.
 
 ### Live state vectors
 
 - `GET https://opensky-network.org/api/states/all?extended=1` (whole world; `extended=1` adds `category`).
-- **Cost:** 4 credits per global request. One request every 90 s is 960 requests and 3,840 credits a day per account, leaving 160 credits for retries.
-- **Headers:** `X-Rate-Limit-Remaining` (credits left in the bucket) and, on HTTP 429, `X-Rate-Limit-Retry-After-Seconds`. Both go into the batch envelope.
+- **Cadence:** one request every 90 s, 960 a day. This fits OpenSky's daily quota with a small margin for retries.
+- **Headers:** `X-Rate-Limit-Remaining` (quota left) and, on HTTP 429, `X-Rate-Limit-Retry-After-Seconds`. Both go into the batch envelope.
 - **Response:** `{ "time": <unix s>, "states": [[...], ...] }`. Each state is a positional array:
 
 | # | Field | Type | Unit / note |
@@ -51,8 +47,8 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 ### OpenSky flight lists
 
 - `GET https://opensky-network.org/api/flights/all?begin=<unix s>&end=<unix s>`, each window at most 2 hours.
-- Data for a day is produced in a nightly batch, so the collectors fetch **yesterday** at 06:00 UTC ([04](04-pipelines.md#p1--collector)).
-- **Cost:** up to 30 credits per request for a past day; 12 requests a day ≤ 360 credits from the separate `/flights/*` bucket. The live map budget is untouched.
+- Data for a day is produced in a nightly batch, so the collector fetches **yesterday** at 06:00 UTC ([04](04-pipelines.md#p1--collector)).
+- **Quota:** 12 requests a day, counted separately from the live map's quota.
 - **Fields:** `icao24`, `callsign`, `firstSeen`, `lastSeen`, `estDepartureAirport`, `estArrivalAirport` (both nullable estimates), the horizontal and vertical distances to those airports, and candidate counts.
 - **Use:** departure and arrival labels for `core.flights` (source `opensky`) and the route lookup `ref.callsign_routes`.
 
@@ -64,7 +60,7 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 
 ## Historical routes: Zenodo
 
-- OpenSky's COVID-19 flight dataset on Zenodo (2019–2022), monthly `flightlist_*.csv.gz`, CC BY 4.0, DOI 10.5281/zenodo.3737101 (cited in the README).
+- OpenSky's COVID-19 flight dataset on Zenodo (2019–2022), monthly `flightlist_*.csv.gz`, DOI 10.5281/zenodo.3737101 (cited in the README), non-commercial licence (`LICENSE.txt` in the record).
 - Converted once to Parquet and read with DuckDB.
 - **Only use:** `routes_refresh` takes Zenodo rows for callsigns that have no OpenSky flight-list entry in the last 28 days. It is a fallback for the first weeks; routes change and the data includes the COVID years.
 
@@ -74,7 +70,7 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 |---|---|---|---|---|
 | Airports | OurAirports `airports.csv` | Public domain | ICAO/IATA, coordinates, type, elevation | seeded in M1, then monthly |
 | Runways | OurAirports `runways.csv` | Public domain | Runway headings for wind components | seeded in M1, then monthly |
-| Aircraft | OpenSky aircraft database CSV | Non-commercial use with attribution, like the API; the exact licence text is recorded here in M3 | icao24 → registration, typecode, operator | monthly |
+| Aircraft | OpenSky aircraft database CSV | Non-commercial, attribution | icao24 → registration, typecode, operator | monthly |
 | Airlines | OpenFlights `airlines.dat` | ODbL 1.0 (attribution in README) | Callsign prefix → airline name | monthly |
 | Countries | Natural Earth admin-0, 1:50m | Public domain | `over_country` for the chat; place names in briefings | monthly |
 | H3 grid | `h3` Python library | Apache 2.0 | Cell ids, boundaries | n/a |

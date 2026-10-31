@@ -33,7 +33,7 @@ Built in this order, only when the roadmap promotes them ([10](10-roadmap.md)):
 
 ## Success criteria
 
-- **Collection:** each collector misses fewer than 5% of its 90 s slots per week (`slot_coverage` over 7 days, [04](04-pipelines.md#data-quality-checks)), and every gap shows on the ops dashboard and in the event feed.
+- **Collection:** the collector misses fewer than 5% of its 90 s slots per week (`slot_coverage` over 7 days, [04](04-pipelines.md#data-quality-checks)), and every gap shows on the ops dashboard and in the event feed.
 - **Map:** the public URL shows the live map in under 3 s and renders 10k+ aircraft at 60 fps on a laptop.
 - **Unusual traffic:** the heatmap uses the hour-of-week baseline (≥ 3 weeks of collected data) and reports synthetic-injection recall and events per day in its model card.
 - **ETA:** p50 MAE beats the historical-median baseline B1 on a time-based hold-out week ([06](06-ml.md#2--arrival-time-eta)).
@@ -53,13 +53,13 @@ These are permanent for Level 1. The product works around them and says so.
 | 90 s between snapshots | Landing times accurate to about a minute; short manoeuvres missed | ETAs as ranges; precision stated in the model card |
 | Aircraft don't broadcast destinations | Destinations are estimates; diversions show late | Top-3 with probabilities, labelled "estimate" |
 | No schedules or air-traffic-control data | Far-out ETAs can't foresee holding or runway changes | Wider p10–p90 ranges |
-| 4,000 credits per account per day | No faster global polling | One account, 90 s refresh ([D4](11-tasks.md#decided-while-building)) |
+| OpenSky's daily API quota | No faster global polling | One collector, 90 s refresh ([D4](11-tasks.md#decided-while-building)) |
 | Collection depends on home internet | Gaps happen | Shown openly; reduced by a dedicated low-power device |
 | Text-to-SQL is never 100% correct | Some wrong answers | SQL always shown; 80% eval target |
 
 ## Non-goals
 
-- Commercial use (the OpenSky licence forbids it).
+- Commercial use.
 - Mobile apps, user accounts, airline schedules or delay data.
 - Detecting individual "unusual flights" (needs routes and schedules we don't have).
 - Exactly-once streaming infrastructure (Kafka, Flink); our scale doesn't need it.

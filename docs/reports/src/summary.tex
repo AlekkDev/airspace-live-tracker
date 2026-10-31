@@ -92,7 +92,7 @@ Airspace Monitor is a live map of the aircraft visible to the OpenSky volunteer 
 \vspace{8pt}
 \begin{center}
 \begin{tabular}{@{}p{3.4cm} p{3.4cm} p{3.4cm} p{3.4cm}@{}}
-{\color{accent}\fontsize{20}{23}\selectfont\bfseries 10k+} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 45--90 s} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 3} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 30 min} \\
+{\color{accent}\fontsize{20}{23}\selectfont\bfseries 10k+} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 90 s} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 3} & {\color{accent}\fontsize{20}{23}\selectfont\bfseries 30 min} \\
 {\color{muted}\scriptsize aircraft in one snapshot} & {\color{muted}\scriptsize refresh between updates} & {\color{muted}\scriptsize target airports} & {\color{muted}\scriptsize AI briefing cadence} \\
 \end{tabular}
 \end{center}
@@ -106,7 +106,7 @@ Airspace Monitor is a live map of the aircraft visible to the OpenSky volunteer 
 {\bfseries Real data engineering}
 
 \vspace{2pt}
-{\footnotesize Two collectors spool every response before upload. Ingest is idempotent, raw data is archived to R2, and the restore path is documented.}
+{\footnotesize The collector spools every response before upload. Ingest is idempotent, raw data is archived to R2, and the restore path is documented.}
 \end{darkcard}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.32\linewidth}
@@ -158,7 +158,7 @@ Four steps, all built as one system:
 {\color{accent}\bfseries 1 · Collect}
 
 \vspace{2pt}
-{\footnotesize Two home PCs ask OpenSky for every visible aircraft every 90 seconds, taking turns. Each response is saved locally first, so a network or server outage only delays data; it does not lose it.}
+{\footnotesize A home PC asks OpenSky for every visible aircraft every 90 seconds. Each response is saved locally first, so a network or server outage only delays data; it does not lose it.}
 \end{card}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.235\linewidth}
@@ -194,7 +194,7 @@ Four steps, all built as one system:
 {\bfseries Data platform}
 
 \vspace{2pt}
-{\footnotesize Python, FastAPI, PostgreSQL 16 + TimescaleDB + PostGIS, Dagster, Grafana, Cloudflare R2. Idempotent ingest, spool-first collectors, data-quality checks and a documented restore path.}
+{\footnotesize Python, FastAPI, PostgreSQL 16 + TimescaleDB + PostGIS, Dagster, Grafana, Cloudflare R2. Idempotent ingest, a spool-first collector, data-quality checks and a documented restore path.}
 \end{softcard}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.32\linewidth}
