@@ -23,3 +23,6 @@ dist/
 
 # Local notes
 docs/review-notes.md
+
+# pytest temp dirs when TMPDIR is unset
+pytest-of-*/

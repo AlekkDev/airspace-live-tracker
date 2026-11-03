@@ -39,6 +39,14 @@ class IngestSettings(BaseSettings):
     database_url: SecretStr
 
 
+class ApiSettings(BaseSettings):
+    """public-api (docs/05-api-contract.md), connecting as `app_reader`."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    database_url: SecretStr
+
+
 class AdminSettings(BaseSettings):
     """Ingest admin CLI, connecting as `airspace_owner`."""
 
