@@ -6,7 +6,7 @@ Task-level status for every milestone: [11 Tasks](11-tasks.md). Weeks are counte
 
 | Milestone | Weeks | Deliverables | Done when |
 |---|---|---|---|
-| **M0 · Foundations** | 0–1 | Repo + docs. OpenSky account and API client. Decide O1. Collector v0 in spool-only mode on pc-daniel via Task Scheduler, including the daily flight-list task. Request the Oracle VM | The collector produces a spool file every 90 s for 48 h; yesterday's flight lists arrive; measured rows/day and spool file sizes are written into [01](01-architecture.md#sizing); VM obtained, or fallback ordered by the end of week 1 |
+| **M0 · Foundations** | 0–1 | Repo + docs. OpenSky account and API client. Decide track owners. Collector v0 in spool-only mode on pc-daniel via Task Scheduler, including the daily flight-list task. Request the Oracle VM | The collector produces a spool file every 90 s for 48 h; yesterday's flight lists arrive; measured rows/day and spool file sizes are written into [01](01-architecture.md#sizing); VM obtained, or fallback ordered by the end of week 1 |
 | **M1 · Platform** | 1–2 | VM with Tailscale (Cloudflare and Caddy wait until before a public launch, [D3](11-tasks.md#decided-while-building)); pinned Timescale image; migrations **without** the compression policy; OurAirports seed (`ref.airports`, `ref.runways`); ingest-api + collector admin CLI; uploader drains the backlog; spool compaction and R2 archive upload; `agg_backfill_refresh`; then the compression-policy migration; Grafana ops dashboards (externally shared); CI and deploy; daily backup | Backlog ingested and aggregated; compression policy merged after the drain; Grafana shows rows/min, slot coverage and gaps; the local dev command works; a restore drill from R2 succeeds |
 | **M2 · Live map** | 2–4 | public-api `/live/*`, `/aircraft/*`, `/events`, `/stats`, `/health`, SSE; stream-worker squawk and go-around events; `metar_fetch`; web app with map, smooth motion, aircraft card, trails, events panel; Cloudflare rate limit, firewall and CORS | Public URL shows smooth live traffic; merge to `main` deploys; every item in [01 Networking and security](01-architecture.md#networking-and-security) is in place before the URL is shared |
 | **M3 · Curated data** | 3–5 | `flights_sessionizer`, `flight_labels_merge`, `routes_refresh`; `ref_refresh` (takes over airports and runways; first load of aircraft, airlines, countries, H3 → country); `metar_backfill`; DQ checks; `collector_gap_check` | `core.flights` has observed arrivals for LOWW/LZIB/LHBP with `height_method` set; route lookup populated; DQ table green |
@@ -31,7 +31,7 @@ Level 2 (own ADS-B receiver) is out of scope ([ADR-0002](adr/0002-source-agnosti
 
 Two tracks meet at the [API contract](05-api-contract.md) and the [data model](03-data-model.md):
 
-| Track A · Data platform | Track B · Product & ML |
+| Track A · Data platform (Dániel) | Track B · Product & ML (Alek) |
 |---|---|
 | collector, ingest-api, DB + migrations | public-api, web app, map layers |
 | orchestrator jobs, DQ, Grafana | ETA + destination, MLflow, model cards |
@@ -43,13 +43,13 @@ The unusual-traffic model is shared: Track A builds the aggregates and baseline,
 
 | # | Decision | Deadline | Until decided |
 |---|---|---|---|
-| O1 | Who owns Track A and Track B | Kickoff, week 0 | — |
 | O5 | Project name and domain | Before a public launch ([D3](11-tasks.md#decided-while-building)) | Working title "Airspace Monitor" |
 
 ## Decided
 
 | Topic | Decision |
 |---|---|
+| Track owners | Track A: Dániel. Track B: Alek (decided 2026-11-03) |
 | Orchestrator | Dagster |
 | Basemap | CARTO Dark Matter; PMTiles is stretch S4 |
 | Polling | One collector polls the whole world every 90 s. A regional high-frequency plan was rejected because it does not fit the API quota |

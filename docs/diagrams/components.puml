@@ -3,55 +3,53 @@
 skinparam shadowing false
 skinparam defaultFontName Arial
 skinparam componentStyle rectangle
-skinparam defaultFontSize 16
+skinparam defaultFontSize 15
 
-actor "Visitor" as visitor
+actor "User" as user
 cloud "OpenSky API" as opensky
-cloud "Claude API" as claude
-cloud "aviationweather.gov\n(METAR)" as metar
+cloud "Weather reports\n(METAR)" as weather
+cloud "LLM API" as llm
+database "Cloudflare R2\n(archives, backups)" as r2
 
-package "Home PC" {
-  component "Collector" as collector
-  database "Local spool" as spool
+package "Home" {
+  component "Collector\n(PC, then Raspberry Pi)" as collector #C8E6C9
+  database "Local spool" as spool #C8E6C9
 }
 
-package "Cloudflare" {
-  component "Edge\n(DNS, proxy, rate limits)" as edge
+package "User's browser" {
   component "Web app\n(React, MapLibre, deck.gl)" as web
-  database "R2\n(archives, backups)" as r2
 }
 
-package "Oracle Cloud VM (docker compose)" {
-  component "Caddy" as caddy
-  component "ingest-api" as ingest
-  component "public-api" as api
+package "Oracle Cloud VM (Docker Compose)" {
+  component "ingest-api\n(FastAPI)" as ingest #C8E6C9
+  database "PostgreSQL\nTimescaleDB + PostGIS" as db #C8E6C9
+  component "public-api\n(FastAPI)" as api
   component "stream-worker" as stream
   component "Dagster\n(jobs, training)" as dagster
-  component "MLflow\n(private)" as mlflow
+  component "MLflow" as mlflow
   component "Grafana" as grafana
-  database "PostgreSQL\nTimescaleDB + PostGIS" as db
 }
 
-opensky --> collector : states, flight lists
-collector --> spool
-collector --> edge : HTTPS batches
+opensky --> collector : positions, flight lists
+collector --> spool : saves first
+collector --> ingest : uploads over Tailscale
 collector --> r2 : daily archive
-visitor --> web
-web --> edge : REST + SSE
-edge --> caddy
-caddy --> ingest
-caddy --> api
-caddy --> grafana
 ingest --> db
-db --> stream : NOTIFY
-db --> api : NOTIFY
-stream --> db
+db --> stream : new snapshots
+stream --> db : events, predictions
+user --> web
+web --> api : REST + live updates
 api --> db
+api --> llm : chat
 grafana --> db
 dagster --> db
 dagster --> mlflow
-dagster --> r2 : backup
-metar --> dagster
-api --> claude : chat
-dagster --> claude : briefing
+dagster --> llm : briefing
+dagster --> r2 : backups
+weather --> dagster
+
+legend right
+  |<#C8E6C9> Running now |
+  |<#F1F1F1> Planned |
+endlegend
 @enduml

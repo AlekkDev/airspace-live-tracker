@@ -3,7 +3,7 @@
 The working task list for the whole application, by milestone ([10](10-roadmap.md)). The specs live in the other docs; this file only says what exists and what is left. Update a task's status in the same PR as the work.
 
 Status: ✅ done · 🟡 in progress · ⬜ to do · ⛔ blocked (the note says on what).
-Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split); owners are open decision O1).
+Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split)). Track A is owned by Dániel, Track B by Alek.
 
 *Last updated: 2026-10-31.*
 
@@ -58,7 +58,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 |---|---|---|---|---|
 | M0.1 | Grounding docs and ADRs | both | ✅ | |
 | M0.2 | OpenSky account and API client | A | ✅ | Token verified 2026-10-29 |
-| M0.5 | Decide O1 (track owners) | both | ⬜ | |
+| M0.5 | Decide track owners | both | ✅ | 2026-11-03: Track A Dániel, Track B Alek |
 | M0.6 | Decide O5 (name and domain); register the domain on Cloudflare | both | ⬜ | No longer blocks M1 (D3); needed before a public launch |
 | M0.7 | Python workspace, lint, type check, tests | A | ✅ | |
 | M0.8 | Collector v0 (loop, spool, failures, flight lists, lock, status) | A | ✅ | `collector/` |
