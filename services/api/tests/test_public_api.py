@@ -1,3 +1,6 @@
+import json
+import threading
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -5,7 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.app import build_app
-from api.models import FIELDS, AircraftDetail, Snapshot, StateRow, Stats, TrackPoint
+from api.models import FIELDS, AircraftDetail, EventRow, Snapshot, StateRow, Stats, TrackPoint
+from api.notifier import EVENT_CHANNEL, SNAPSHOT_CHANNEL, Notify
 from api.store import Bbox
 
 T = datetime(2026, 11, 3, 13, 26, 58, tzinfo=UTC)
@@ -64,6 +68,31 @@ class FakeStore:
         )
         self.track_calls: list[tuple[str, int]] = []
         self.last_icao24: str | None = None
+        self.event_rows: tuple[EventRow, ...] = (
+            EventRow(
+                event_id=2,
+                ts=T,
+                kind="go_around",
+                severity="warn",
+                title="Go-around at LOWW (AUA478)",
+                icao24="4b1805",
+                airport_icao="LOWW",
+                lon=16.6,
+                lat=48.1,
+            ),
+            EventRow(
+                event_id=1,
+                ts=T - timedelta(minutes=5),
+                kind="collector_gap",
+                severity="warn",
+                title="Collector gap (pc-daniel, 4 min)",
+                icao24=None,
+                airport_icao=None,
+                lon=None,
+                lat=None,
+            ),
+        )
+        self.event_calls: list[tuple[int, tuple[datetime, int] | None]] = []
 
     def snapshot(self, at: datetime | None = None, bbox: Bbox | None = None) -> Snapshot | None:
         if self.fail:
@@ -95,8 +124,31 @@ class FakeStore:
         self.track_calls.append((icao24, minutes))
         return self.points
 
+    def events(
+        self, limit: int, before: tuple[datetime, int] | None = None
+    ) -> tuple[EventRow, ...]:
+        if self.fail:
+            raise RuntimeError("database is down")
+        self.event_calls.append((limit, before))
+        return self.event_rows[:limit]
+
+    def event(self, event_id: int) -> EventRow | None:
+        if self.fail:
+            raise RuntimeError("database is down")
+        return next((row for row in self.event_rows if row.event_id == event_id), None)
+
     def ping(self) -> None:
         pass
+
+
+class FakeNotifier:
+    """Yields a fixed list of notifications, then ends the stream."""
+
+    def __init__(self, notes: list[Notify] | None = None) -> None:
+        self.notes = notes or []
+
+    def listen(self, stop: threading.Event) -> Iterator[Notify]:
+        yield from self.notes
 
 
 @pytest.fixture
@@ -106,7 +158,7 @@ def store() -> FakeStore:
 
 @pytest.fixture
 def client(store: FakeStore) -> TestClient:
-    return TestClient(build_app(store))
+    return TestClient(build_app(store, FakeNotifier()))
 
 
 def test_snapshot_matches_the_contract(client: TestClient) -> None:
@@ -295,6 +347,107 @@ def test_track_window_is_validated(client: TestClient, minutes: str) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_minutes"
+
+
+def test_events_payload_and_default_limit(client: TestClient, store: FakeStore) -> None:
+    body = client.get("/api/v1/events").json()
+
+    assert store.event_calls == [(50, None)]
+    assert body["events"][0] == {
+        "event_id": 2,
+        "ts": "2026-11-03T13:26:58Z",
+        "kind": "go_around",
+        "severity": "warn",
+        "title": "Go-around at LOWW (AUA478)",
+        "icao24": "4b1805",
+        "airport_icao": "LOWW",
+        "lon": 16.6,
+        "lat": 48.1,
+    }
+    # a gap has no location, and the keys are still present
+    assert body["events"][1]["lon"] is None
+    assert body["events"][1]["icao24"] is None
+    assert body["next_cursor"] is None
+
+
+def test_events_cursor_is_returned_on_a_full_page(client: TestClient) -> None:
+    body = client.get("/api/v1/events", params={"limit": "2"}).json()
+
+    assert body["next_cursor"] == {"before_ts": "2026-11-03T13:21:58Z", "before_id": 1}
+
+
+def test_events_cursor_is_passed_back(client: TestClient, store: FakeStore) -> None:
+    client.get("/api/v1/events", params={"before_ts": "2026-11-03T13:21:58Z", "before_id": "1"})
+
+    assert store.event_calls == [(50, (datetime(2026, 11, 3, 13, 21, 58, tzinfo=UTC), 1))]
+
+
+@pytest.mark.parametrize("limit", ["0", "101", "-1", "many"])
+def test_events_limit_is_validated(client: TestClient, limit: str) -> None:
+    response = client.get("/api/v1/events", params={"limit": limit})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_limit"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"before_ts": "2026-11-03T13:21:58Z"},
+        {"before_id": "1"},
+        {"before_ts": "not-a-time", "before_id": "1"},
+        {"before_ts": "2026-11-03T13:21:58Z", "before_id": "one"},
+    ],
+)
+def test_events_cursor_is_validated(client: TestClient, params: dict[str, str]) -> None:
+    response = client.get("/api/v1/events", params=params)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_cursor"
+
+
+def stream_body(store: FakeStore, notes: list[Notify]) -> tuple[str, Any]:
+    """Run the SSE endpoint to completion with a fixed list of notifications."""
+    client = TestClient(build_app(store, FakeNotifier(notes)))
+    with client.stream("GET", "/api/v1/live/stream") as response:
+        return "".join(response.iter_text()), response.headers
+
+
+def test_stream_emits_snapshot_ready(store: FakeStore) -> None:
+    body, headers = stream_body(store, [Notify(SNAPSHOT_CHANNEL, "2026-11-03T14:31:30Z")])
+
+    assert headers["content-type"].startswith("text/event-stream")
+    assert headers["cache-control"] == "no-store"
+    assert body == 'event: snapshot_ready\ndata: {"snapshot_time":"2026-11-03T14:31:30Z"}\n\n'
+
+
+def test_stream_emits_the_event_object(store: FakeStore) -> None:
+    body, _ = stream_body(store, [Notify(EVENT_CHANNEL, "2")])
+
+    assert body.startswith("event: event\ndata: ")
+    payload = json.loads(body.split("data: ", 1)[1].strip())
+    assert payload["event_id"] == 2
+    assert payload["kind"] == "go_around"
+    assert payload["title"] == "Go-around at LOWW (AUA478)"
+
+
+def test_stream_ignores_junk(store: FakeStore) -> None:
+    body, _ = stream_body(
+        store,
+        [
+            Notify("some_other_channel", "x"),
+            Notify(EVENT_CHANNEL, "999"),  # no such event
+            Notify(EVENT_CHANNEL, "not-a-number"),
+        ],
+    )
+
+    assert body == ""
+
+
+def test_stream_closes_when_the_source_ends(store: FakeStore) -> None:
+    body, _ = stream_body(store, [])
+
+    assert body == ""
 
 
 def test_health_ok(client: TestClient, store: FakeStore) -> None:

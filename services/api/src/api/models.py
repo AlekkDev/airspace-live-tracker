@@ -101,3 +101,18 @@ class TrackPoint:
 
     def as_list(self) -> list[object]:
         return [self.unix_s, self.lon, self.lat, self.alt_m]
+
+
+@dataclass(frozen=True, slots=True)
+class EventRow:
+    """One row of `core.events`; shared by `GET /events` and the SSE `event` frame."""
+
+    event_id: int
+    ts: datetime
+    kind: str
+    severity: str
+    title: str
+    icao24: str | None
+    airport_icao: str | None
+    lon: float | None
+    lat: float | None

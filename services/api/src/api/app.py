@@ -1,5 +1,9 @@
 """public-api read endpoints (`docs/05-api-contract.md`)."""
 
+import asyncio
+import contextlib
+import json
+import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -8,17 +12,21 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, FastAPI
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from airspace_common.log import configure_logging
 from airspace_common.settings import ApiSettings
 from airspace_common.timefmt import iso_z
-from api.models import FIELDS, AircraftDetail, Snapshot, StateRow
+from api.models import FIELDS, AircraftDetail, EventRow, Snapshot, StateRow
+from api.notifier import EVENT_CHANNEL, SNAPSHOT_CHANNEL, Notifier, Notify, PgNotifier
 from api.store import Bbox, PgStore, Store
 
 CADENCE_SECONDS = 90
 DEGRADED_AFTER_SECONDS = 300
 MAX_TRACK_MINUTES = 240
+DEFAULT_EVENT_LIMIT = 50
+MAX_EVENT_LIMIT = 100
+SSE_KEEPALIVE_SECONDS = 20
 API_PREFIX = "/api/v1"
 
 log = structlog.get_logger()
@@ -72,6 +80,34 @@ def parse_minutes(raw: str | None) -> int:
     return minutes
 
 
+def parse_limit(raw: str | None) -> int:
+    if raw is None:
+        return DEFAULT_EVENT_LIMIT
+    try:
+        limit = int(raw)
+    except ValueError as exc:
+        raise BadRequest("invalid_limit", "limit must be a whole number") from exc
+    if not 1 <= limit <= MAX_EVENT_LIMIT:
+        raise BadRequest("invalid_limit", f"limit must be between 1 and {MAX_EVENT_LIMIT}")
+    return limit
+
+
+def parse_cursor(before_ts: str | None, before_id: str | None) -> tuple[datetime, int] | None:
+    """The `(ts, event_id)` pair of the previous page, or None for the first page."""
+    if before_ts is None and before_id is None:
+        return None
+    if before_ts is None or before_id is None:
+        raise BadRequest("invalid_cursor", "before_ts and before_id must be passed together")
+    try:
+        event_id = int(before_id)
+    except ValueError as exc:
+        raise BadRequest("invalid_cursor", "before_id must be a whole number") from exc
+    try:
+        return parse_snapshot_time(before_ts), event_id
+    except BadRequest as exc:
+        raise BadRequest("invalid_cursor", str(exc)) from exc
+
+
 def _last_state(state: StateRow, at: datetime) -> dict[str, Any]:
     return {
         "time": iso_z(at, "seconds"),
@@ -94,6 +130,86 @@ def snapshot_payload(snapshot: Snapshot) -> dict[str, Any]:
         "fields": list(FIELDS),
         "states": [state.as_list() for state in snapshot.states],
     }
+
+
+def event_payload(event: EventRow) -> dict[str, Any]:
+    """The shape of one event in `/events` and in the SSE `event` frame."""
+    return {
+        "event_id": event.event_id,
+        "ts": iso_z(event.ts, "seconds"),
+        "kind": event.kind,
+        "severity": event.severity,
+        "title": event.title,
+        "icao24": event.icao24,
+        "airport_icao": event.airport_icao,
+        "lon": event.lon,
+        "lat": event.lat,
+    }
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    """One SSE frame: an event name, one data line, and a blank line to terminate it."""
+    return f"event: {event}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+async def sse_frames(store: Store, notifier: Notifier) -> AsyncIterator[str]:
+    """Turn database notifications into SSE frames, with a keep-alive every 20 s.
+
+    The listener runs in a worker thread and posts each notification into an asyncio queue,
+    so the frame loop can wait on that queue with a timeout: the timeout is what produces the
+    keep-alive. Waiting directly on a blocking source would freeze the event loop instead.
+    """
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[Notify | None] = asyncio.Queue(maxsize=256)
+    stop = threading.Event()
+
+    def post(item: Notify | None) -> None:
+        with contextlib.suppress(asyncio.QueueFull):
+            queue.put_nowait(item)
+
+    def pump() -> None:
+        try:
+            for note in notifier.listen(stop):
+                loop.call_soon_threadsafe(post, note)
+        except Exception:
+            log.exception("stream_source_failed")
+        finally:
+            # `None` tells the frame loop that the source has ended.
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(post, None)
+
+    thread = threading.Thread(target=pump, name="sse-listener", daemon=True)
+    thread.start()
+    try:
+        while True:
+            try:
+                note = await asyncio.wait_for(queue.get(), timeout=SSE_KEEPALIVE_SECONDS)
+            except TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            if note is None:
+                return
+            frame = await _frame_for(store, note)
+            if frame is not None:
+                yield frame
+    finally:
+        stop.set()
+
+
+async def _frame_for(store: Store, note: Notify) -> str | None:
+    """Map one notification to one frame; unknown channels and dangling ids are dropped."""
+    if note.channel == SNAPSHOT_CHANNEL:
+        payload = note.payload.strip()
+        return None if not payload else _sse("snapshot_ready", {"snapshot_time": payload})
+    if note.channel == EVENT_CHANNEL:
+        try:
+            event_id = int(note.payload)
+        except ValueError:
+            log.warning("stream_bad_event_payload", payload=note.payload)
+            return None
+        row = await run_in_threadpool(store.event, event_id)
+        return None if row is None else _sse("event", event_payload(row))
+    return None
 
 
 def aircraft_payload(detail: AircraftDetail) -> dict[str, Any]:
@@ -121,7 +237,7 @@ def aircraft_payload(detail: AircraftDetail) -> dict[str, Any]:
     }
 
 
-def build_app(store: Store) -> FastAPI:
+def build_app(store: Store, notifier: Notifier) -> FastAPI:
     app = FastAPI(
         title="airspace public-api",
         docs_url=None,
@@ -183,6 +299,42 @@ def build_app(store: Store) -> FastAPI:
             headers={"Cache-Control": "no-store"},
         )
 
+    @router.get("/live/stream")
+    async def live_stream() -> StreamingResponse:
+        # `X-Accel-Buffering: no` stops nginx-style proxies buffering the stream into silence.
+        return StreamingResponse(
+            sse_frames(store, notifier),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @router.get("/events")
+    async def events(
+        limit: str | None = None, before_ts: str | None = None, before_id: str | None = None
+    ) -> JSONResponse:
+        try:
+            size = parse_limit(limit)
+            cursor = parse_cursor(before_ts, before_id)
+        except BadRequest as exc:
+            return _error(422, exc.code, exc.message)
+        try:
+            rows = await run_in_threadpool(store.events, size, cursor)
+        except Exception:
+            log.exception("events_query_failed")
+            return _error(503, "database_unavailable", "the database is not reachable")
+        next_cursor = None
+        if len(rows) == size:
+            last = rows[-1]
+            next_cursor = {"before_ts": iso_z(last.ts, "seconds"), "before_id": last.event_id}
+        return JSONResponse(
+            {"events": [event_payload(row) for row in rows], "next_cursor": next_cursor},
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.get("/stats")
     async def stats() -> JSONResponse:
         try:
@@ -224,7 +376,9 @@ def create_app() -> FastAPI:
     """Entry point for uvicorn."""
     settings = ApiSettings()
     configure_logging("api")
-    store = PgStore(settings.database_url.get_secret_value())
+    dsn = settings.database_url.get_secret_value()
+    store = PgStore(dsn)
+    notifier = PgNotifier(dsn)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -234,6 +388,6 @@ def create_app() -> FastAPI:
         finally:
             store.close()
 
-    app = build_app(store)
+    app = build_app(store, notifier)
     app.router.lifespan_context = lifespan
     return app

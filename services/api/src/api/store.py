@@ -6,7 +6,7 @@ from typing import Protocol
 from psycopg_pool import ConnectionPool
 
 from airspace_common.live import LIVE_WINDOW_SECONDS
-from api.models import AircraftDetail, Snapshot, StateRow, Stats, TrackPoint
+from api.models import AircraftDetail, EventRow, Snapshot, StateRow, Stats, TrackPoint
 
 # minLon, minLat, maxLon, maxLat
 Bbox = tuple[float, float, float, float]
@@ -97,6 +97,22 @@ ORDER BY unix_s
 """
 
 
+# Keyset paging: `(ts, event_id)` sorts exactly like the table's index, and the pair keeps
+# the cursor stable while new events arrive between page loads.
+_EVENTS_SQL = """
+SELECT event_id, ts, kind, severity, title, icao24, airport_icao, lon, lat
+FROM core.events
+{cursor}
+ORDER BY ts DESC, event_id DESC
+LIMIT %s
+"""
+
+_EVENT_SQL = """
+SELECT event_id, ts, kind, severity, title, icao24, airport_icao, lon, lat
+FROM core.events WHERE event_id = %s
+"""
+
+
 class Store(Protocol):
     """The read surface public-api needs; tests replace it with a fake."""
 
@@ -113,6 +129,14 @@ class Store(Protocol):
     def aircraft(self, icao24: str) -> AircraftDetail | None: ...
 
     def track(self, icao24: str, minutes: int) -> tuple[TrackPoint, ...]: ...
+
+    def events(
+        self, limit: int, before: tuple[datetime, int] | None = None
+    ) -> tuple[EventRow, ...]:
+        """Newest first; `before` is the `(ts, event_id)` cursor of the previous page."""
+        ...
+
+    def event(self, event_id: int) -> EventRow | None: ...
 
     def ping(self) -> None: ...
 
@@ -144,6 +168,20 @@ def _state_row(row: tuple[object, ...]) -> StateRow:
         category=_as_int(row[9]),
         squawk=_as_str(row[10]),
         pos_age_s=_as_int(row[11]),
+    )
+
+
+def _event_row(row: tuple[object, ...]) -> EventRow:
+    return EventRow(
+        event_id=int(row[0]),  # type: ignore[call-overload]
+        ts=row[1],  # type: ignore[arg-type]
+        kind=str(row[2]),
+        severity=str(row[3]),
+        title=str(row[4]),
+        icao24=_as_str(row[5]),
+        airport_icao=_as_str(row[6]),
+        lon=_as_float(row[7]),
+        lat=_as_float(row[8]),
     )
 
 
@@ -233,3 +271,18 @@ class PgStore:
             )
             for row in rows
         )
+
+    def events(
+        self, limit: int, before: tuple[datetime, int] | None = None
+    ) -> tuple[EventRow, ...]:
+        cursor = "" if before is None else "WHERE (ts, event_id) < (%s, %s)"
+        params: list[object] = [] if before is None else [before[0], before[1]]
+        params.append(limit)
+        with self._pool.connection() as conn:
+            rows = conn.execute(_EVENTS_SQL.format(cursor=cursor), params).fetchall()
+        return tuple(_event_row(row) for row in rows)
+
+    def event(self, event_id: int) -> EventRow | None:
+        with self._pool.connection() as conn:
+            row = conn.execute(_EVENT_SQL, (event_id,)).fetchone()
+        return None if row is None else _event_row(row)
