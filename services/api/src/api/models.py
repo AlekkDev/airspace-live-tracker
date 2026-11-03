@@ -61,3 +61,43 @@ class Snapshot:
 
     snapshot_time: datetime
     states: tuple[StateRow, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Stats:
+    """`GET /stats` numbers, computed in one query."""
+
+    aircraft_now: int
+    snapshot_time: datetime | None
+    collectors_online: int
+    rows_today: int
+    dq_status: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AircraftDetail:
+    """`GET /aircraft/{icao24}`. The enrichment fields stay NULL until `ref` and `core` fill."""
+
+    snapshot_time: datetime
+    state: StateRow
+    registration: str | None
+    typecode: str | None
+    operator: str | None
+    airline: str | None
+    flight_id: str | None
+    flight_first_seen: datetime | None
+    dep_icao: str | None
+    dep_source: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class TrackPoint:
+    """One deduplicated position in `GET /aircraft/{icao24}/track`."""
+
+    unix_s: int
+    lon: float
+    lat: float
+    alt_m: float | None
+
+    def as_list(self) -> list[object]:
+        return [self.unix_s, self.lon, self.lat, self.alt_m]

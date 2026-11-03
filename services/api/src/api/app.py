@@ -13,11 +13,12 @@ from fastapi.responses import JSONResponse
 from airspace_common.log import configure_logging
 from airspace_common.settings import ApiSettings
 from airspace_common.timefmt import iso_z
-from api.models import FIELDS, Snapshot
+from api.models import FIELDS, AircraftDetail, Snapshot, StateRow
 from api.store import Bbox, PgStore, Store
 
 CADENCE_SECONDS = 90
 DEGRADED_AFTER_SECONDS = 300
+MAX_TRACK_MINUTES = 240
 API_PREFIX = "/api/v1"
 
 log = structlog.get_logger()
@@ -59,6 +60,31 @@ def parse_snapshot_time(raw: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def parse_minutes(raw: str | None) -> int:
+    if raw is None:
+        return 60
+    try:
+        minutes = int(raw)
+    except ValueError as exc:
+        raise BadRequest("invalid_minutes", "minutes must be a whole number") from exc
+    if not 1 <= minutes <= MAX_TRACK_MINUTES:
+        raise BadRequest("invalid_minutes", f"minutes must be between 1 and {MAX_TRACK_MINUTES}")
+    return minutes
+
+
+def _last_state(state: StateRow, at: datetime) -> dict[str, Any]:
+    return {
+        "time": iso_z(at, "seconds"),
+        "lon": state.lon,
+        "lat": state.lat,
+        "alt_m": state.alt_m,
+        "vel_ms": state.vel_ms,
+        "track_deg": state.track_deg,
+        "vrate_ms": state.vrate_ms,
+        "pos_age_s": state.pos_age_s,
+    }
+
+
 def snapshot_payload(snapshot: Snapshot) -> dict[str, Any]:
     return {
         "snapshot_time": iso_z(snapshot.snapshot_time, "seconds"),
@@ -67,6 +93,31 @@ def snapshot_payload(snapshot: Snapshot) -> dict[str, Any]:
         ),
         "fields": list(FIELDS),
         "states": [state.as_list() for state in snapshot.states],
+    }
+
+
+def aircraft_payload(detail: AircraftDetail) -> dict[str, Any]:
+    flight = None
+    if detail.flight_id is not None:
+        flight = {
+            "flight_id": detail.flight_id,
+            "first_seen": None
+            if detail.flight_first_seen is None
+            else iso_z(detail.flight_first_seen, "seconds"),
+            "dep_icao": detail.dep_icao,
+            "dep_source": detail.dep_source,
+        }
+    return {
+        "icao24": detail.state.icao24,
+        "callsign": detail.state.callsign,
+        "registration": detail.registration,
+        "typecode": detail.typecode,
+        "operator": detail.operator,
+        "airline": detail.airline,
+        "last_state": _last_state(detail.state, detail.snapshot_time),
+        "flight": flight,
+        "destination": None,
+        "eta": None,
     }
 
 
@@ -101,6 +152,56 @@ def build_app(store: Store) -> FastAPI:
             else {"Cache-Control": "no-store"}
         )
         return JSONResponse(snapshot_payload(snapshot), headers=headers)
+
+    @router.get("/aircraft/{icao24}")
+    async def aircraft(icao24: str) -> JSONResponse:
+        try:
+            detail = await run_in_threadpool(store.aircraft, icao24.strip().lower())
+        except Exception:
+            log.exception("aircraft_query_failed", icao24=icao24)
+            return _error(503, "database_unavailable", "the database is not reachable")
+        if detail is None:
+            return _error(
+                404, "aircraft_not_found", "no state vectors for that icao24 in the last 30 minutes"
+            )
+        return JSONResponse(aircraft_payload(detail))
+
+    @router.get("/aircraft/{icao24}/track")
+    async def aircraft_track(icao24: str, minutes: str | None = None) -> JSONResponse:
+        try:
+            window = parse_minutes(minutes)
+        except BadRequest as exc:
+            return _error(422, exc.code, exc.message)
+        key = icao24.strip().lower()
+        try:
+            points = await run_in_threadpool(store.track, key, window)
+        except Exception:
+            log.exception("track_query_failed", icao24=key)
+            return _error(503, "database_unavailable", "the database is not reachable")
+        return JSONResponse(
+            {"icao24": key, "points": [point.as_list() for point in points]},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/stats")
+    async def stats() -> JSONResponse:
+        try:
+            numbers = await run_in_threadpool(store.stats)
+        except Exception:
+            log.exception("stats_query_failed")
+            return _error(503, "database_unavailable", "the database is not reachable")
+        return JSONResponse(
+            {
+                "aircraft_now": numbers.aircraft_now,
+                "snapshot_time": None
+                if numbers.snapshot_time is None
+                else iso_z(numbers.snapshot_time, "seconds"),
+                "collectors_online": numbers.collectors_online,
+                "rows_today": numbers.rows_today,
+                "dq_status": numbers.dq_status,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/health")
     async def health() -> JSONResponse:
