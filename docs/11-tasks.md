@@ -18,7 +18,8 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | Collection | **pc-daniel collecting since 2026-10-29 16:07 UTC**, spool-only (`UPLOAD_ENABLED=false`), as the scheduled task `airspace-collector` |
 | Server | Oracle A1 VM `airspace-vm` (Frankfurt, 2 OCPU, 12 GB, 200 GB) with Docker and Tailscale, created 2026-10-30. No inbound ports open to the internet. Runs the database and ingest-api |
 | Pipeline | pc-daniel uploads to ingest-api on the VM over Tailscale; batches land in TimescaleDB |
-| Not started | Public API, stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
+| Not started | stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
+| public-api | `services/api` serves all of M2.1 as `app_reader`: `/live/snapshot`, `/stats`, `/aircraft/{icao24}`, `/aircraft/{icao24}/track`, `/events`, `/live/stream` (SSE), `/health` |
 
 ## Open questions found while building
 
@@ -86,7 +87,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 
 | # | Task | Track | Status | Notes |
 |---|---|---|---|---|
-| M2.1 | public-api: `/live/snapshot`, `/live/stream` (SSE), `/aircraft/{icao24}`, `/aircraft/{icao24}/track`, `/events`, `/stats`, `/health` | B | ⬜ | |
+| M2.1 | public-api: `/live/snapshot`, `/live/stream` (SSE), `/aircraft/{icao24}`, `/aircraft/{icao24}/track`, `/events`, `/stats`, `/health` | B | 🟡 | `services/api` serves all seven endpoints (129 tests, checked against the VM database). Left: a Dockerfile and a compose entry so it runs on the VM (M1.15) |
 | M2.2 | stream-worker: squawk and go-around events, `ops.stream_state` | A | ⬜ | Go-arounds use `ref.airports` from M1.18 |
 | M2.3 | `metar_fetch` job | A | ⬜ | |
 | M2.4 | Web app shell: layout, header stats, attribution footer, bottom sheet under 900 px | B | ⬜ | |
