@@ -1,0 +1,487 @@
+import json
+import threading
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from api.app import build_app
+from api.models import FIELDS, AircraftDetail, EventRow, Snapshot, StateRow, Stats, TrackPoint
+from api.notifier import EVENT_CHANNEL, SNAPSHOT_CHANNEL, Notify
+from api.store import Bbox
+
+T = datetime(2026, 11, 3, 13, 26, 58, tzinfo=UTC)
+
+
+def row(**overrides: Any) -> StateRow:
+    values: dict[str, Any] = {
+        "icao24": "4b1805",
+        "callsign": "SWR283",
+        "lon": 16.12,
+        "lat": 48.02,
+        "alt_m": 10363.2,
+        "vel_ms": 231.4,
+        "track_deg": 92.1,
+        "vrate_ms": 0.0,
+        "on_ground": False,
+        "category": 4,
+        "squawk": "2331",
+        "pos_age_s": 2,
+    }
+    values.update(overrides)
+    return StateRow(**values)
+
+
+class FakeStore:
+    def __init__(self) -> None:
+        self.snapshot_time: datetime | None = T
+        self.states: tuple[StateRow, ...] = (
+            row(),
+            row(icao24="4400aa", callsign=None, squawk=None, pos_age_s=None),
+        )
+        self.calls: list[tuple[datetime | None, Bbox | None]] = []
+        self.fail = False
+        self.stats_row = Stats(
+            aircraft_now=9230,
+            snapshot_time=T,
+            collectors_online=1,
+            rows_today=8_123_456,
+            dq_status=None,
+        )
+        self.aircraft_row: AircraftDetail | None = AircraftDetail(
+            snapshot_time=T,
+            state=row(),
+            registration=None,
+            typecode=None,
+            operator=None,
+            airline=None,
+            flight_id=None,
+            flight_first_seen=None,
+            dep_icao=None,
+            dep_source=None,
+        )
+        self.points: tuple[TrackPoint, ...] = (
+            TrackPoint(unix_s=1793716290, lon=16.1, lat=48.0, alt_m=1000.0),
+            TrackPoint(unix_s=1793716350, lon=16.2, lat=48.1, alt_m=None),
+        )
+        self.track_calls: list[tuple[str, int]] = []
+        self.last_icao24: str | None = None
+        self.event_rows: tuple[EventRow, ...] = (
+            EventRow(
+                event_id=2,
+                ts=T,
+                kind="go_around",
+                severity="warn",
+                title="Go-around at LOWW (AUA478)",
+                icao24="4b1805",
+                airport_icao="LOWW",
+                lon=16.6,
+                lat=48.1,
+            ),
+            EventRow(
+                event_id=1,
+                ts=T - timedelta(minutes=5),
+                kind="collector_gap",
+                severity="warn",
+                title="Collector gap (pc-daniel, 4 min)",
+                icao24=None,
+                airport_icao=None,
+                lon=None,
+                lat=None,
+            ),
+        )
+        self.event_calls: list[tuple[int, tuple[datetime, int] | None]] = []
+
+    def snapshot(self, at: datetime | None = None, bbox: Bbox | None = None) -> Snapshot | None:
+        if self.fail:
+            raise RuntimeError("database is down")
+        self.calls.append((at, bbox))
+        if self.snapshot_time is None or (at is not None and at != self.snapshot_time):
+            return None
+        return Snapshot(self.snapshot_time, self.states)
+
+    def last_snapshot_time(self) -> datetime | None:
+        if self.fail:
+            raise RuntimeError("database is down")
+        return self.snapshot_time
+
+    def stats(self) -> Stats:
+        if self.fail:
+            raise RuntimeError("database is down")
+        return self.stats_row
+
+    def aircraft(self, icao24: str) -> AircraftDetail | None:
+        if self.fail:
+            raise RuntimeError("database is down")
+        self.last_icao24 = icao24
+        return self.aircraft_row
+
+    def track(self, icao24: str, minutes: int) -> tuple[TrackPoint, ...]:
+        if self.fail:
+            raise RuntimeError("database is down")
+        self.track_calls.append((icao24, minutes))
+        return self.points
+
+    def events(
+        self, limit: int, before: tuple[datetime, int] | None = None
+    ) -> tuple[EventRow, ...]:
+        if self.fail:
+            raise RuntimeError("database is down")
+        self.event_calls.append((limit, before))
+        return self.event_rows[:limit]
+
+    def event(self, event_id: int) -> EventRow | None:
+        if self.fail:
+            raise RuntimeError("database is down")
+        return next((row for row in self.event_rows if row.event_id == event_id), None)
+
+    def ping(self) -> None:
+        pass
+
+
+class FakeNotifier:
+    """Yields a fixed list of notifications, then ends the stream."""
+
+    def __init__(self, notes: list[Notify] | None = None) -> None:
+        self.notes = notes or []
+
+    def listen(self, stop: threading.Event) -> Iterator[Notify]:
+        yield from self.notes
+
+
+@pytest.fixture
+def store() -> FakeStore:
+    return FakeStore()
+
+
+@pytest.fixture
+def client(store: FakeStore) -> TestClient:
+    return TestClient(build_app(store, FakeNotifier()))
+
+
+def test_snapshot_matches_the_contract(client: TestClient) -> None:
+    response = client.get("/api/v1/live/snapshot")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["snapshot_time"] == "2026-11-03T13:26:58Z"
+    assert body["next_expected_at"] == "2026-11-03T13:28:28Z"
+    assert body["fields"] == list(FIELDS)
+    assert body["states"][0] == [
+        "4b1805",
+        "SWR283",
+        16.12,
+        48.02,
+        10363.2,
+        231.4,
+        92.1,
+        0.0,
+        False,
+        4,
+        "2331",
+        2,
+    ]
+    # absent values stay null, and are not dropped from the array
+    assert body["states"][1][1] is None
+    assert body["states"][1][11] is None
+
+
+def test_latest_snapshot_is_not_cached(client: TestClient) -> None:
+    assert client.get("/api/v1/live/snapshot").headers["cache-control"] == "no-store"
+
+
+def test_explicit_snapshot_is_immutable(client: TestClient) -> None:
+    response = client.get("/api/v1/live/snapshot", params={"t": "2026-11-03T13:26:58Z"})
+
+    assert response.status_code == 200
+    assert response.json()["snapshot_time"] == "2026-11-03T13:26:58Z"
+    assert response.headers["cache-control"] == "public, max-age=86400, immutable"
+
+
+def test_bbox_is_passed_through(client: TestClient, store: FakeStore) -> None:
+    response = client.get("/api/v1/live/snapshot", params={"bbox": "10.5,40,20,50.25"})
+
+    assert response.status_code == 200
+    assert store.calls == [(None, (10.5, 40.0, 20.0, 50.25))]
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    ["1,2,3", "1,2,3,4,5", "a,b,c,d", "10,40,5,50", "10,-95,20,50", "-181,0,20,50"],
+)
+def test_invalid_bbox_is_rejected(client: TestClient, bbox: str) -> None:
+    response = client.get("/api/v1/live/snapshot", params={"bbox": bbox})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_bbox"
+    assert client.get("/api/v1/live/snapshot").status_code == 200
+
+
+@pytest.mark.parametrize("t", ["yesterday", "2026-11-03T13:26:58", "2026-13-03T13:26:58Z"])
+def test_invalid_timestamp_is_rejected(client: TestClient, t: str) -> None:
+    response = client.get("/api/v1/live/snapshot", params={"t": t})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_timestamp"
+
+
+def test_unknown_snapshot_is_404(client: TestClient) -> None:
+    response = client.get("/api/v1/live/snapshot", params={"t": "2026-11-01T00:00:00Z"})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "snapshot_not_found"
+
+
+def test_no_live_data_is_503(client: TestClient, store: FakeStore) -> None:
+    store.snapshot_time = None
+
+    response = client.get("/api/v1/live/snapshot")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "no_live_data"
+
+
+def test_stats_payload(client: TestClient) -> None:
+    body = client.get("/api/v1/stats").json()
+
+    assert body == {
+        "aircraft_now": 9230,
+        "snapshot_time": "2026-11-03T13:26:58Z",
+        "collectors_online": 1,
+        "rows_today": 8_123_456,
+        "dq_status": None,
+    }
+
+
+def test_stats_reports_the_worst_dq_status(client: TestClient, store: FakeStore) -> None:
+    store.stats_row = Stats(
+        aircraft_now=10, snapshot_time=T, collectors_online=0, rows_today=0, dq_status="warn"
+    )
+
+    assert client.get("/api/v1/stats").json()["dq_status"] == "warn"
+
+
+def test_aircraft_card_keeps_unknown_fields_null(client: TestClient) -> None:
+    body = client.get("/api/v1/aircraft/4b1805").json()
+
+    assert body["icao24"] == "4b1805"
+    assert body["registration"] is None
+    assert body["typecode"] is None
+    assert body["airline"] is None
+    assert body["flight"] is None
+    assert body["destination"] is None
+    assert body["eta"] is None
+    assert body["last_state"] == {
+        "time": "2026-11-03T13:26:58Z",
+        "lon": 16.12,
+        "lat": 48.02,
+        "alt_m": 10363.2,
+        "vel_ms": 231.4,
+        "track_deg": 92.1,
+        "vrate_ms": 0.0,
+        "pos_age_s": 2,
+    }
+
+
+def test_aircraft_card_includes_the_open_flight(client: TestClient, store: FakeStore) -> None:
+    store.aircraft_row = AircraftDetail(
+        snapshot_time=T,
+        state=row(),
+        registration="HB-JCA",
+        typecode="BCS3",
+        operator="Swiss",
+        airline="Swiss International Air Lines",
+        flight_id="0192f0c4-0000-7000-8000-000000000001",
+        flight_first_seen=T - timedelta(hours=1),
+        dep_icao="LSZH",
+        dep_source="opensky",
+    )
+
+    body = client.get("/api/v1/aircraft/4b1805").json()
+
+    assert body["registration"] == "HB-JCA"
+    assert body["flight"] == {
+        "flight_id": "0192f0c4-0000-7000-8000-000000000001",
+        "first_seen": "2026-11-03T12:26:58Z",
+        "dep_icao": "LSZH",
+        "dep_source": "opensky",
+    }
+
+
+def test_icao24_is_lowercased(client: TestClient, store: FakeStore) -> None:
+    assert client.get("/api/v1/aircraft/4B1805").status_code == 200
+    assert store.last_icao24 == "4b1805"
+
+
+def test_unknown_aircraft_is_404(client: TestClient, store: FakeStore) -> None:
+    store.aircraft_row = None
+
+    response = client.get("/api/v1/aircraft/ffffff")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "aircraft_not_found"
+
+
+def test_track_defaults_to_sixty_minutes(client: TestClient, store: FakeStore) -> None:
+    body = client.get("/api/v1/aircraft/4b1805/track").json()
+
+    assert store.track_calls == [("4b1805", 60)]
+    assert body["icao24"] == "4b1805"
+    assert body["points"] == [
+        [1793716290, 16.1, 48.0, 1000.0],
+        [1793716350, 16.2, 48.1, None],
+    ]
+
+
+def test_track_window_is_passed_through(client: TestClient, store: FakeStore) -> None:
+    client.get("/api/v1/aircraft/4b1805/track", params={"minutes": "15"})
+
+    assert store.track_calls == [("4b1805", 15)]
+
+
+@pytest.mark.parametrize("minutes", ["0", "241", "-5", "ten"])
+def test_track_window_is_validated(client: TestClient, minutes: str) -> None:
+    response = client.get("/api/v1/aircraft/4b1805/track", params={"minutes": minutes})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_minutes"
+
+
+def test_events_payload_and_default_limit(client: TestClient, store: FakeStore) -> None:
+    body = client.get("/api/v1/events").json()
+
+    assert store.event_calls == [(50, None)]
+    assert body["events"][0] == {
+        "event_id": 2,
+        "ts": "2026-11-03T13:26:58Z",
+        "kind": "go_around",
+        "severity": "warn",
+        "title": "Go-around at LOWW (AUA478)",
+        "icao24": "4b1805",
+        "airport_icao": "LOWW",
+        "lon": 16.6,
+        "lat": 48.1,
+    }
+    # a gap has no location, and the keys are still present
+    assert body["events"][1]["lon"] is None
+    assert body["events"][1]["icao24"] is None
+    assert body["next_cursor"] is None
+
+
+def test_events_cursor_is_returned_on_a_full_page(client: TestClient) -> None:
+    body = client.get("/api/v1/events", params={"limit": "2"}).json()
+
+    assert body["next_cursor"] == {"before_ts": "2026-11-03T13:21:58Z", "before_id": 1}
+
+
+def test_events_cursor_is_passed_back(client: TestClient, store: FakeStore) -> None:
+    client.get("/api/v1/events", params={"before_ts": "2026-11-03T13:21:58Z", "before_id": "1"})
+
+    assert store.event_calls == [(50, (datetime(2026, 11, 3, 13, 21, 58, tzinfo=UTC), 1))]
+
+
+@pytest.mark.parametrize("limit", ["0", "101", "-1", "many"])
+def test_events_limit_is_validated(client: TestClient, limit: str) -> None:
+    response = client.get("/api/v1/events", params={"limit": limit})
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_limit"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"before_ts": "2026-11-03T13:21:58Z"},
+        {"before_id": "1"},
+        {"before_ts": "not-a-time", "before_id": "1"},
+        {"before_ts": "2026-11-03T13:21:58Z", "before_id": "one"},
+    ],
+)
+def test_events_cursor_is_validated(client: TestClient, params: dict[str, str]) -> None:
+    response = client.get("/api/v1/events", params=params)
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_cursor"
+
+
+def stream_body(store: FakeStore, notes: list[Notify]) -> tuple[str, Any]:
+    """Run the SSE endpoint to completion with a fixed list of notifications."""
+    client = TestClient(build_app(store, FakeNotifier(notes)))
+    with client.stream("GET", "/api/v1/live/stream") as response:
+        return "".join(response.iter_text()), response.headers
+
+
+def test_stream_emits_snapshot_ready(store: FakeStore) -> None:
+    body, headers = stream_body(store, [Notify(SNAPSHOT_CHANNEL, "2026-11-03T14:31:30Z")])
+
+    assert headers["content-type"].startswith("text/event-stream")
+    assert headers["cache-control"] == "no-store"
+    assert body == 'event: snapshot_ready\ndata: {"snapshot_time":"2026-11-03T14:31:30Z"}\n\n'
+
+
+def test_stream_emits_the_event_object(store: FakeStore) -> None:
+    body, _ = stream_body(store, [Notify(EVENT_CHANNEL, "2")])
+
+    assert body.startswith("event: event\ndata: ")
+    payload = json.loads(body.split("data: ", 1)[1].strip())
+    assert payload["event_id"] == 2
+    assert payload["kind"] == "go_around"
+    assert payload["title"] == "Go-around at LOWW (AUA478)"
+
+
+def test_stream_ignores_junk(store: FakeStore) -> None:
+    body, _ = stream_body(
+        store,
+        [
+            Notify("some_other_channel", "x"),
+            Notify(EVENT_CHANNEL, "999"),  # no such event
+            Notify(EVENT_CHANNEL, "not-a-number"),
+        ],
+    )
+
+    assert body == ""
+
+
+def test_stream_closes_when_the_source_ends(store: FakeStore) -> None:
+    body, _ = stream_body(store, [])
+
+    assert body == ""
+
+
+def test_health_ok(client: TestClient, store: FakeStore) -> None:
+    store.snapshot_time = datetime.now(UTC) - timedelta(seconds=30)
+
+    body = client.get("/api/v1/health").json()
+
+    assert body["status"] == "ok"
+    assert body["db"] == "ok"
+    assert 25 <= body["last_snapshot_age_s"] <= 120
+
+
+def test_health_degraded_when_stale(client: TestClient, store: FakeStore) -> None:
+    store.snapshot_time = datetime.now(UTC) - timedelta(seconds=900)
+
+    body = client.get("/api/v1/health").json()
+
+    assert body["status"] == "degraded"
+    assert body["db"] == "ok"
+
+
+def test_database_failure_is_reported(client: TestClient, store: FakeStore) -> None:
+    store.fail = True
+
+    snapshot = client.get("/api/v1/live/snapshot")
+    stats = client.get("/api/v1/stats")
+    aircraft = client.get("/api/v1/aircraft/4b1805")
+    track = client.get("/api/v1/aircraft/4b1805/track")
+    health = client.get("/api/v1/health")
+
+    assert snapshot.status_code == 503
+    assert snapshot.json()["error"]["code"] == "database_unavailable"
+    assert stats.status_code == 503
+    assert aircraft.status_code == 503
+    assert track.status_code == 503
+    assert health.status_code == 503
+    assert health.json() == {"status": "degraded", "db": "error", "last_snapshot_age_s": None}
