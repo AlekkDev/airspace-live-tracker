@@ -5,7 +5,7 @@ The working task list for the whole application, by milestone ([10](10-roadmap.m
 Status: ✅ done · 🟡 in progress · ⬜ to do · ⛔ blocked (the note says on what).
 Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split)). Track A is owned by Dániel, Track B by Alek.
 
-*Last updated: 2026-10-31.*
+*Last updated: 2026-11-03.*
 
 ## What exists now
 
@@ -17,7 +17,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | Collector v0 | State-vector loop on the 90 s grid, OAuth2 token handling, atomic spool writes, failure handling (retry, 429 back-off, failed envelopes), daily flight-list task with restart-safe progress, single-instance lock, `status` command. 38 tests |
 | Collection | **pc-daniel collecting since 2026-10-29 16:07 UTC** as the scheduled task `airspace-collector`, switched off overnight until the Raspberry Pi takes over (D5) |
 | Server | Oracle A1 VM `airspace-vm` (Frankfurt, 2 OCPU, 12 GB, 200 GB) with Docker and Tailscale, created 2026-10-30. No inbound ports open to the internet. Runs the database and ingest-api |
-| Pipeline | pc-daniel uploads to ingest-api on the VM over Tailscale; batches land in TimescaleDB |
+| Pipeline | pc-daniel uploads to ingest-api on the VM over Tailscale; batches land in TimescaleDB. On 2026-11-03: 2,780 snapshots, 27.5M state vectors, 314k flight-list rows, nothing rejected; database 6.5 GB, uncompressed |
 | Not started | Public API, stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
 
 ## Open questions found while building
@@ -64,7 +64,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M0.8 | Collector v0 (loop, spool, failures, flight lists, lock, status) | A | ✅ | `collector/` |
 | M0.9 | Run the collector on pc-daniel as a scheduled task | A | ✅ | Task `airspace-collector` (S4U, at startup) since 2026-10-29. Switched off overnight until the Pi takes over (D5) |
 | M0.13 | 48 h check: a spool file every 90 s; yesterday's flight lists arrive | A | ⬜ | Run on the Pi once M0.20 is done; pc-daniel is off overnight, so it cannot pass there |
-| M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | ⬜ | Rows/day from the spool now; Parquet sizes after M1.19. First hour: ~13,300 aircraft per snapshot, ~500 KB per gzipped spool file |
+| M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | 🟡 | Rows/day and bytes/row measured on the VM and written into 01 (2026-11-03). Left: compressed size after M1.11, Parquet sizes after M1.19 |
 | M0.15 | Request the Oracle A1 VM; order the Contabo fallback if none by the end of week 1 | A | ✅ | VM created 2026-10-30; no fallback needed. Check Cost Analysis shows 0 by 2026-11-01 |
 | M0.16 | Teammate review of the docs rewrite (pushed to `main` without a PR) | B | ⬜ | Commit `5ad79a1` |
 | M0.17 | Product owner decisions (core vs stretch, hosting, dropped items, data limits) | both | ⬜ | |

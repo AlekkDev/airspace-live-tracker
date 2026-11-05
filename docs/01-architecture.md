@@ -53,7 +53,7 @@ flowchart LR
 | Component | Runs on | Responsibility | Tech |
 |---|---|---|---|
 | **collector** | Home PC (Windows Task Scheduler) until the Raspberry Pi takes over | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
-| **ingest-api** | VM | Authenticate the collector, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, asyncpg |
+| **ingest-api** | VM | Authenticate the collector, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, psycopg 3 |
 | **db** | VM | System of record | PostgreSQL 16, TimescaleDB ≥ 2.19, PostGIS |
 | **stream-worker** | VM | Per-snapshot work on live snapshots: squawk and go-around events, ETA inference | Python, `LISTEN/NOTIFY` |
 | **orchestrator** | VM | Scheduled, windowed jobs ([04](04-pipelines.md#p4--orchestrated-jobs)) | Dagster (webserver, daemon, code location) |
@@ -131,13 +131,14 @@ The collector copies its Parquet archives to R2 `airspace-archive/` daily, so ra
 
 | Item | Estimate | Basis |
 |---|---|---|
-| State vectors | ~11M rows/day | 960 snapshots × ~11.6k aircraft (spool sample, 2026-10) |
-| Raw size | ~3 GB/day uncompressed, ~0.3 GB/day compressed | ~250–300 bytes/row with 2 indexes; ~10× compression |
-| Raw at 90 days | ~30–35 GB | 2 uncompressed days + 88 compressed days |
+| State vectors | ~9.5M rows/day at 24/7 | 960 snapshots × 9,886 aircraft on average (measured 2026-10-29 to 11-03; 5,700–13,600 per snapshot over the day). pc-daniel, off overnight, stores 5–6M rows/day |
+| Raw size | ~2.3 GB/day uncompressed, ~0.25 GB/day compressed | 244 bytes/row with 2 indexes (measured); ~10× compression (estimate, check after M1.11) |
+| Raw at 90 days | ~27–30 GB | 2 uncompressed days + 88 compressed days |
+| Flight lists | ~52k rows/day | Measured over 6 days |
 | Everything else | < 15 GB | predictions with retention, flight lists, aggregates |
 | RAM | ~8 GB steady, ~10 GB during training | Postgres 4 GB, Dagster 1.5 GB, MLflow 0.5 GB, Grafana 0.3 GB, services 1.5 GB |
 
-These are estimates. M0 measures real row counts and Parquet sizes from the spool; update this table with the measured values.
+Rows and bytes per row are measured on the VM; compression and "everything else" are still estimates. Update the compressed size after M1.11 and the Parquet sizes after M1.19.
 
 ## Cost (Level 1, per month, excl. VAT)
 
