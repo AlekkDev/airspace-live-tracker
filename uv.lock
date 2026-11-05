@@ -1,13 +1,33 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.12.*"
 
 [manifest]
 members = [
+    "airspace-api",
     "airspace-collector",
     "airspace-common",
     "airspace-ingest",
     "airspace-live-tracker",
+]
+
+[[package]]
+name = "airspace-api"
+version = "0.1.0"
+source = { editable = "services/api" }
+dependencies = [
+    { name = "airspace-common" },
+    { name = "fastapi" },
+    { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "airspace-common", editable = "libs/airspace_common" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
+    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [[package]]
@@ -70,6 +90,7 @@ name = "airspace-live-tracker"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "airspace-api" },
     { name = "airspace-collector" },
     { name = "airspace-common" },
     { name = "airspace-ingest" },
@@ -85,6 +106,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "airspace-api", editable = "services/api" },
     { name = "airspace-collector", editable = "collector" },
     { name = "airspace-common", editable = "libs/airspace_common" },
     { name = "airspace-ingest", editable = "services/ingest" },
