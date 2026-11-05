@@ -5,7 +5,7 @@ The working task list for the whole application, by milestone ([10](10-roadmap.m
 Status: ✅ done · 🟡 in progress · ⬜ to do · ⛔ blocked (the note says on what).
 Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split); owners are open decision O1).
 
-*Last updated: 2026-10-30.*
+*Last updated: 2026-11-03.*
 
 ## What exists now
 
@@ -72,7 +72,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ✅ | Enabled on pc-daniel 2026-10-30 |
 | M1.9 | Drain the M0 backlog | A | ✅ | Drained 2026-10-30: 736 snapshots, 8.75M state vectors, 119,723 flights, nothing rejected. About 230 B/row before compression, so M1.11 matters next |
 | M1.10 | `agg.traffic_h3_15m`, `agg.coverage_15m`, `agg_backfill_refresh` | A | ⬜ | |
-| M1.11 | Compression-policy migration, merged after the drain | A | ⬜ | |
+| M1.11 | Compression-policy migration, merged after the drain | A | 🟡 | `20261103140000_raw_compression_policy.sql`; `db/tests/test_schema.sql` runs the policy job. Done when applied on the VM and the compressed size is written into [01 Sizing](01-architecture.md#sizing) |
 | M1.12 | Dagster webserver, daemon and code location (tailnet only) | A | ⬜ | |
 | M1.13 | Grafana provisioning; ops dashboards (rows/min, slot coverage, gaps), externally shared | A | ⬜ | |
 | M1.14 | `ci.yml`: ruff, mypy, pytest, ESLint, tsc, Vitest, migration test, multi-arch build | A | ⬜ | |
