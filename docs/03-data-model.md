@@ -52,7 +52,6 @@ erDiagram
 CREATE TABLE ops.collectors (
   collector_id     text PRIMARY KEY,            -- 'pc-daniel', 'dev-01'
   owner            text NOT NULL,
-  offset_seconds   smallint NOT NULL CHECK (offset_seconds IN (0, 45)),
   api_key_hash     text NOT NULL,               -- argon2id; the only place a collector key is stored server-side
   created_at       timestamptz NOT NULL DEFAULT now(),
   disabled_at      timestamptz
@@ -123,7 +122,7 @@ CREATE TABLE ops.stream_state (                 -- single row; stream-worker pro
 
 -- Views for Grafana (never expose api_key_hash)
 CREATE VIEW ops.v_collectors AS
-  SELECT collector_id, owner, offset_seconds, created_at, disabled_at FROM ops.collectors;
+  SELECT collector_id, owner, created_at, disabled_at FROM ops.collectors;
 CREATE VIEW ops.v_ingest_batches AS SELECT * FROM ops.ingest_batches;
 ```
 
@@ -179,7 +178,7 @@ Rules:
 - Inserts use `ON CONFLICT DO NOTHING`; re-uploading a batch is harmless.
 - Snapshots have different `snapshot_time` values (90 s apart) and never conflict.
 - Rows whose position did not change between snapshots are kept. Consumers that need distinct positions dedupe on `(icao24, time_position)`.
-- Older history than 90 days is read from the collectors' Parquet archives with DuckDB, never re-inserted.
+- Older history than 90 days is read from the collector's Parquet archives with DuckDB, never re-inserted.
 
 ### `raw.opensky_flights` (hypertable)
 

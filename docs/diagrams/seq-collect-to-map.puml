@@ -3,33 +3,31 @@ skinparam shadowing false
 hide footbox
 skinparam defaultFontName Arial
 
+participant "OpenSky API" as O
 participant "Collector" as C
 database "Local spool" as S
-participant "OpenSky API" as O
 participant "ingest-api" as I
 database "PostgreSQL" as D
 participant "public-api" as A
 participant "Web app" as W
 
-C -> O : GET /states/all (every 90 s)
-O --> C : state vectors
-C -> S : write batch file first
-C -> I : POST /ingest/v1/batches
-I -> D : insert, ignoring duplicates
-alt snapshot under 10 min old
-  I -> D : NOTIFY new_snapshot
-  D --> A : new_snapshot
-  A --> W : SSE snapshot_ready
-  W -> A : GET /live/snapshot?t=...
-  A -> D : read snapshot
+C -> O : get all positions (every 90 s)
+O --> C : positions
+C -> S : save batch first
+C -> I : upload batch over Tailscale
+I -> D : store, skipping duplicates
+alt snapshot under 10 minutes old
+  D --> A : new snapshot
+  A --> W : live update (SSE)
+  W -> A : fetch snapshot
   A --> W : aircraft positions
-else backlog after an outage
-  note over I, D : stored only, map not disturbed
+else old batch after an outage
+  note over I, D : stored only, the map is not disturbed
 end
-I --> C : 2xx
-C -> S : move batch to sent/
+I --> C : confirmed
+C -> S : mark batch as sent
 note over C, S
-  If the upload fails, the batch stays in
-  pending/ and is retried: delayed, not lost.
+  If the upload fails, the batch stays
+  in the spool and is retried later.
 end note
 @enduml

@@ -15,4 +15,3 @@ Level 1 ships with OpenSky as the only live source. The ingest contract stays Op
 ## Consequences
 - No `source` column or Level 2 code paths in Level 1; nothing to keep half-working.
 - If Level 2 is picked up later, it gets its own ADR covering: a separate table or `source` column with a preference rule, a separate live path for 1 Hz data outside Postgres, and excluding local data from density.
-- A feeder account would double the `/states/*` credits to 8,000/day; that benefit is noted but not planned for.
