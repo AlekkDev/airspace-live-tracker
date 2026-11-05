@@ -59,6 +59,31 @@ BEGIN
   END IF;
 END $$;
 
+-- The compression policy compresses chunks older than 2 days and leaves recent ones alone
+SELECT decompress_chunk(c) FROM show_chunks('raw.state_vectors') c;
+SET ROLE ingest_writer;
+INSERT INTO raw.state_vectors (snapshot_time, icao24, batch_id)
+VALUES (now(), 'dddddd', '00000000-0000-7000-8000-000000000001');
+RESET ROLE;
+SELECT job_id AS compression_job FROM timescaledb_information.jobs
+WHERE proc_name = 'policy_compression' AND hypertable_schema = 'raw' AND hypertable_name = 'state_vectors'
+  AND config->>'compress_after' = '2 days' \gset
+CALL run_job(:compression_job);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM timescaledb_information.chunks WHERE hypertable_name = 'state_vectors'
+             AND range_end <= now() - interval '2 days' AND NOT is_compressed) THEN
+    RAISE EXCEPTION 'compression policy left an old chunk uncompressed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM timescaledb_information.chunks WHERE hypertable_name = 'state_vectors'
+             AND range_end > now() AND is_compressed) THEN
+    RAISE EXCEPTION 'compression policy compressed the current chunk';
+  END IF;
+  IF (SELECT count(*) FROM raw.state_vectors) <> 5 THEN
+    RAISE EXCEPTION 'compression changed the row count';
+  END IF;
+END $$;
+
 -- Generated column and event trigger work
 DO $$
 BEGIN
