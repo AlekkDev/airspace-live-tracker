@@ -132,13 +132,13 @@ The collector copies its Parquet archives to R2 `airspace-archive/` daily, so ra
 | Item | Estimate | Basis |
 |---|---|---|
 | State vectors | ~9.5M rows/day at 24/7 | 960 snapshots × 9,886 aircraft on average (measured 2026-10-29 to 11-03; 5,700–13,600 per snapshot over the day). pc-daniel, off overnight, stores 5–6M rows/day |
-| Raw size | ~2.3 GB/day uncompressed, ~0.25 GB/day compressed | 244 bytes/row with 2 indexes (measured); ~10× compression (estimate, check after M1.11) |
-| Raw at 90 days | ~27–30 GB | 2 uncompressed days + 88 compressed days |
+| Raw size | ~2.3 GB/day uncompressed, ~0.65 GB/day compressed | 244 bytes/row with 2 indexes; 69 bytes/row compressed, 2.9× (both measured; compression on 5 days of data, 2026-11-05) |
+| Raw at 90 days | ~60–65 GB | 2 uncompressed days + 88 compressed days |
 | Flight lists | ~52k rows/day | Measured over 6 days |
 | Everything else | < 15 GB | predictions with retention, flight lists, aggregates |
 | RAM | ~8 GB steady, ~10 GB during training | Postgres 4 GB, Dagster 1.5 GB, MLflow 0.5 GB, Grafana 0.3 GB, services 1.5 GB |
 
-Rows and bytes per row are measured on the VM; compression and "everything else" are still estimates. Update the compressed size after M1.11 and the Parquet sizes after M1.19.
+Rows, bytes per row and compression are measured on the VM; "everything else" is still an estimate. Update the Parquet sizes after M1.19.
 
 ## Cost (Level 1, per month, excl. VAT)
 
