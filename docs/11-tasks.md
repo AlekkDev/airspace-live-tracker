@@ -5,7 +5,7 @@ The working task list for the whole application, by milestone ([10](10-roadmap.m
 Status: ✅ done · 🟡 in progress · ⬜ to do · ⛔ blocked (the note says on what).
 Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#work-split)). Track A is owned by Dániel, Track B by Alek.
 
-*Last updated: 2026-11-05.*
+*Last updated: 2026-11-07.*
 
 ## What exists now
 
@@ -15,7 +15,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | Python workspace | uv workspace at the repo root (Python 3.12): `collector`, `libs/airspace_common`. ruff, mypy (on `libs/`), pytest. `.gitignore`, `.env.example` |
 | `libs/airspace_common` | `settings.py` (collector settings), `timefmt.py` (`iso_z`), `log.py` (structlog JSON) |
 | Collector v0 | State-vector loop on the 90 s grid, OAuth2 token handling, atomic spool writes, failure handling (retry, 429 back-off, failed envelopes), daily flight-list task with restart-safe progress, single-instance lock, `status` command. 38 tests |
-| Collection | **pc-daniel collecting since 2026-10-29 16:07 UTC** as the scheduled task `airspace-collector`, switched off overnight until the Raspberry Pi takes over (D5) |
+| Collection | **pi-daniel collecting 24/7 since 2026-11-07** on the Raspberry Pi (Debian 13 arm64, 4 GB RAM, 64 GB microSD) in Docker (`collector/compose.yml`). pc-daniel collected 2026-10-29 to 11-07, off overnight; its task `airspace-collector` is stopped and must stay disabled (D4) |
 | Server | Oracle A1 VM `airspace-vm` (Frankfurt, 2 OCPU, 12 GB, 200 GB) with Docker and Tailscale, created 2026-10-30. No inbound ports open to the internet. Runs the database and ingest-api |
 | Pipeline | pc-daniel uploads to ingest-api on the VM over Tailscale; batches land in TimescaleDB. On 2026-11-03: 2,780 snapshots, 27.5M state vectors, 314k flight-list rows, nothing rejected; database 6.5 GB, uncompressed |
 | Not started | stream worker, Dagster jobs, Grafana, web app, ML, LLM, CI/CD |
@@ -52,7 +52,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | D2 | OurAirports airports and runways are seeded in M1 (`db/seeds/ourairports.py`), not first loaded in M3 | Go-around detection (M2) needs target-airport elevations. One source of truth instead of hard-coded constants (decided 2026-10-29) |
 | D3 | While the project is private, the VM is reachable over Tailscale only and the collector uploads over the tailnet. Cloudflare, the domain, Caddy and port 443 wait until before a public launch | Nothing is public yet, so nothing needs to be open to the internet or paid for. Supersedes the `ingest.<domain>` path until then (decided 2026-10-30) |
 | D4 | One collector; the map refreshes every 90 s | One collector keeps collection simple, 90 s fits the API quota, and the map moves smoothly between snapshots (decided 2026-10-30) |
-| D5 | A Raspberry Pi becomes the collector and runs 24/7. pc-daniel collects until then and is switched off overnight | A device that stays on removes the overnight gaps. Gaps before the switch are accepted, not treated as faults (decided 2026-10-31) |
+| D5 | A Raspberry Pi becomes the collector and runs 24/7. pc-daniel collected until then and was switched off overnight | A device that stays on removes the overnight gaps. Gaps before the switch are accepted, not treated as faults (decided 2026-10-31; switched 2026-11-07) |
 
 ## M0 · Foundations (weeks 0–1)
 
@@ -65,14 +65,14 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M0.7 | Python workspace, lint, type check, tests | A | ✅ | |
 | M0.8 | Collector v0 (loop, spool, failures, flight lists, lock, status) | A | ✅ | `collector/` |
 | M0.9 | Run the collector on pc-daniel as a scheduled task | A | ✅ | Task `airspace-collector` (S4U, at startup) since 2026-10-29. Switched off overnight until the Pi takes over (D5) |
-| M0.13 | 48 h check: a spool file every 90 s; yesterday's flight lists arrive | A | ⬜ | Run on the Pi once M0.20 is done; pc-daniel is off overnight, so it cannot pass there |
+| M0.13 | 48 h check: a spool file every 90 s; yesterday's flight lists arrive | A | ⬜ | Runs on the Pi from 2026-11-07; check on 2026-11-09 |
 | M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | 🟡 | Rows/day, bytes/row and compressed size measured on the VM and written into 01. Left: Parquet sizes after M1.19 |
 | M0.15 | Request the Oracle A1 VM; order the Contabo fallback if none by the end of week 1 | A | ✅ | VM created 2026-10-30; no fallback needed. Cost Analysis shows 0 HUF for 2026-10-30 to 11-05 |
 | M0.16 | Teammate review of the docs rewrite (pushed to `main` without a PR) | B | ⬜ | Commit `5ad79a1` |
 | M0.17 | Product owner decisions (core vs stretch, hosting, dropped items, data limits) | both | ⬜ | |
 | M0.18 | Verify the flight-list quota cost and the Zenodo DOI ([02](02-data-sources.md)) | A | ✅ | Quota measured 2026-10-29. DOI checked 2026-10-31: it is not CC BY (Q2) |
-| M0.19 | Collector Dockerfile (amd64 + arm64) | A | ⬜ | Needed for the Pi (D5) |
-| M0.20 | Move the collector to the Raspberry Pi: 64-bit OS, Tailscale, Docker, its own `add-collector` key | A | ⛔ | Waiting for the Pi to arrive; needs M0.19. Stop the pc-daniel task before starting the Pi, so only one collector runs (D4). Let pc-daniel's spool finish uploading, and keep it: until M1.20 it is the only copy of its archive (D1) |
+| M0.19 | Collector Dockerfile (amd64 + arm64) | A | ✅ | `collector/Dockerfile` and `collector/compose.yml` (host networking, spool bind mount, small Docker logs). Built on the Pi; not yet built in CI (M1.14) |
+| M0.20 | Move the collector to the Raspberry Pi: 64-bit OS, Tailscale, Docker, its own `add-collector` key | A | ✅ | Switched 2026-11-07 as `pi-daniel`, with the PC's flight-list progress copied over. pc-daniel's spool was fully uploaded; keep its `spool/sent` until backups exist (D1). The Pi's code was copied by hand, not cloned from git yet |
 
 ## M1 · Platform (weeks 1–2)
 

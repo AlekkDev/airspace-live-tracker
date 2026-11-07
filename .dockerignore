@@ -1,0 +1,13 @@
+# Keep secrets, collected data and local tooling out of every image build context.
+.env
+.env.*
+!.env.example
+spool/
+.git/
+.venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+docs/
+node_modules/

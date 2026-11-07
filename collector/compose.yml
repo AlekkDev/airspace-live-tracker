@@ -1,0 +1,26 @@
+# The collector on a Linux device such as the Raspberry Pi (docs/04-pipelines.md#p1--collector).
+# Run from the repo root: docker compose -f collector/compose.yml up -d --build
+# Config comes from .env in the repo root; see .env.example.
+name: airspace-collector
+
+services:
+  collector:
+    image: airspace-collector:local
+    build:
+      context: ..
+      dockerfile: collector/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      SPOOL_DIR: /data/spool
+    # Host networking: the tailnet name of the VM (INGEST_URL) resolves as it does on the host.
+    network_mode: host
+    user: "${COLLECTOR_UID:-1000}:${COLLECTOR_GID:-1000}"
+    volumes:
+      - ../spool:/data/spool
+    logging:
+      # The collector also writes spool/logs/collector.log; keep Docker's copy small on an SD card.
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
