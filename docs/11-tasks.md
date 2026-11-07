@@ -53,6 +53,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | D3 | While the project is private, the VM is reachable over Tailscale only and the collector uploads over the tailnet. Cloudflare, the domain, Caddy and port 443 wait until before a public launch | Nothing is public yet, so nothing needs to be open to the internet or paid for. Supersedes the `ingest.<domain>` path until then (decided 2026-10-30) |
 | D4 | One collector; the map refreshes every 90 s | One collector keeps collection simple, 90 s fits the API quota, and the map moves smoothly between snapshots (decided 2026-10-30) |
 | D5 | A Raspberry Pi becomes the collector and runs 24/7. pc-daniel collected until then and was switched off overnight | A device that stays on removes the overnight gaps. Gaps before the switch are accepted, not treated as faults (decided 2026-10-31; switched 2026-11-07) |
+| D6 | The collector keeps 30 days of Parquet archives locally (`ARCHIVE_RETENTION_DAYS=30`), down from 90. The VM database is the main store and R2 the full archive | About 6 GB on the Pi's 64 GB SD card instead of 15–20 GB; older archives are restored from R2 (decided 2026-11-07) |
 
 ## M0 · Foundations (weeks 0–1)
 
@@ -97,7 +98,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M1.17 | Local dev command with the fixture database | A | ⬜ | |
 | M1.18 | OurAirports seed loader `db/seeds/ourairports.py` (`ref.airports`, `ref.runways`) | A | ⬜ | D2 |
 | M1.19 | Spool compaction to Parquet at 00:30 UTC (uploaded files only) | A | ⬜ | D1; after M1.8 |
-| M1.20 | R2 bucket `airspace-archive`, `rclone copy` at 01:00 UTC, local retention (`ARCHIVE_RETENTION_DAYS`, `RCLONE_REMOTE`) | A | ⬜ | D1; needs a Cloudflare account |
+| M1.20 | R2 bucket `airspace-archive`, `rclone copy` at 01:00 UTC, local retention (`ARCHIVE_RETENTION_DAYS=30`, `RCLONE_REMOTE`) | A | ⬜ | D1, D6; needs a Cloudflare account |
 | M1.21 | Remove the leftover collector offset: forward migration dropping `ops.collectors.offset_seconds`, `OFFSET_SECONDS` in settings and `.env.example`, `--offset` in the admin CLI | A | ⬜ | The docs already describe one collector on a plain 90 s grid. Harmless until then: the offset is 0 |
 
 ## M2 · Live map (weeks 2–4)
