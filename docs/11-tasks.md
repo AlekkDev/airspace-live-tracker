@@ -40,6 +40,7 @@ Track: **A** = data platform, **B** = product & ML ([work split](10-roadmap.md#w
 | Q13 | Dead reckoning with `pos_age_s = null`, and whether `H3HexagonLayer` can draw a dashed outline | Small but visible map bugs |
 | Q14 | OpenFlights is ODbL 1.0: check whether share-alike applies to our airline table, or use a CC0 list | Attribution alone may not be enough |
 | Q15 | A reference device and connection for the "< 3 s, 60 fps" criterion in [00](00-overview.md#success-criteria) | Otherwise it can't be tested |
+| Q16 | Raw compression is 2.9× (69 B/row) against the ~10× estimated; sorted Parquet reached 17 B/row. Check the `segmentby`/`orderby` settings and the index on the compressed chunks | At 24/7 collection 90 days is ~60–65 GB instead of ~30 GB; it still fits the 200 GB disk |
 
 Q4–Q15 carry over the findings still open from the 2026-10-30 documentation review.
 
@@ -65,8 +66,8 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M0.8 | Collector v0 (loop, spool, failures, flight lists, lock, status) | A | ✅ | `collector/` |
 | M0.9 | Run the collector on pc-daniel as a scheduled task | A | ✅ | Task `airspace-collector` (S4U, at startup) since 2026-10-29. Switched off overnight until the Pi takes over (D5) |
 | M0.13 | 48 h check: a spool file every 90 s; yesterday's flight lists arrive | A | ⬜ | Runs on the Pi from 2026-11-07; check on 2026-11-09 |
-| M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | 🟡 | Rows/day and bytes/row measured on the VM and written into 01 (2026-11-03). Left: compressed size after M1.11, Parquet sizes after M1.19 |
-| M0.15 | Request the Oracle A1 VM; order the Contabo fallback if none by the end of week 1 | A | ✅ | VM created 2026-10-30; no fallback needed. Check Cost Analysis shows 0 by 2026-11-01 |
+| M0.14 | Write measured rows/day and file sizes into [01 Sizing](01-architecture.md#sizing) | A | 🟡 | Rows/day, bytes/row and compressed size measured on the VM and written into 01. Left: Parquet sizes after M1.19 |
+| M0.15 | Request the Oracle A1 VM; order the Contabo fallback if none by the end of week 1 | A | ✅ | VM created 2026-10-30; no fallback needed. Cost Analysis shows 0 HUF for 2026-10-30 to 11-05 |
 | M0.16 | Teammate review of the docs rewrite (pushed to `main` without a PR) | B | ⬜ | Commit `5ad79a1` |
 | M0.17 | Product owner decisions (core vs stretch, hosting, dropped items, data limits) | both | ⬜ | |
 | M0.18 | Verify the flight-list quota cost and the Zenodo DOI ([02](02-data-sources.md)) | A | ✅ | Quota measured 2026-10-29. DOI checked 2026-10-31: it is not CC BY (Q2) |
@@ -87,7 +88,7 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M1.8 | Collector uploader (oldest-first, back-off, 401/413/422 handling); then `UPLOAD_ENABLED=true` | A | ✅ | Enabled on pc-daniel 2026-10-30 |
 | M1.9 | Drain the M0 backlog | A | ✅ | Drained 2026-10-30: 736 snapshots, 8.75M state vectors, 119,723 flights, nothing rejected. About 230 B/row before compression, so M1.11 matters next |
 | M1.10 | `agg.traffic_h3_15m`, `agg.coverage_15m`, `agg_backfill_refresh` | A | ⬜ | |
-| M1.11 | Compression-policy migration, merged after the drain | A | 🟡 | `20261103140000_raw_compression_policy.sql`; `db/tests/test_schema.sql` runs the policy job. Done when applied on the VM and the compressed size is written into [01 Sizing](01-architecture.md#sizing) |
+| M1.11 | Compression-policy migration, merged after the drain | A | ✅ | Applied on the VM 2026-11-05 (job 1005, every 12 h). First run compressed 5 days from 6.0 GB to 2.1 GB (2.9×, 69 B/row), lower than the ~10× estimated (Q16) |
 | M1.12 | Dagster webserver, daemon and code location (tailnet only) | A | ⬜ | |
 | M1.13 | Grafana provisioning; ops dashboards (rows/min, slot coverage, gaps), externally shared | A | ⬜ | |
 | M1.14 | `ci.yml`: ruff, mypy, pytest, ESLint, tsc, Vitest, migration test, multi-arch build | A | ⬜ | |
