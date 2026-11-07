@@ -52,7 +52,7 @@ flowchart LR
 
 | Component | Runs on | Responsibility | Tech |
 |---|---|---|---|
-| **collector** | Home PC (Windows Task Scheduler) until the Raspberry Pi takes over | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
+| **collector** | Raspberry Pi at home, in Docker (a Windows PC until 2026-11-07) | Poll OpenSky on a fixed grid, spool every response, upload, archive to Parquet and R2 | Python 3.12, httpx |
 | **ingest-api** | VM | Authenticate the collector, validate, normalise, compute H3, insert idempotently, record batches, `NOTIFY` live snapshots | FastAPI, psycopg 3 |
 | **db** | VM | System of record | PostgreSQL 16, TimescaleDB ≥ 2.19, PostGIS |
 | **stream-worker** | VM | Per-snapshot work on live snapshots: squawk and go-around events, ETA inference | Python, `LISTEN/NOTIFY` |
