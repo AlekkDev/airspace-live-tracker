@@ -79,12 +79,12 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 
 **Status:** `uv run -m collector status` prints the pending file count and size and the newest batches.
 
-**Archive:** at 00:30 UTC, compact yesterday's `sent/` state-vector files into `spool/archive/states/YYYY-MM-DD.parquet` (one row per state vector, plus `batch_id`) and flight-list files into `spool/archive/flights/YYYY-MM-DD.parquet`, then delete those JSON files. At 01:00 UTC, `rclone copy` the archive to Cloudflare R2 `airspace-archive/<collector_id>/`. Local archives older than `ARCHIVE_RETENTION_DAYS` (90) are deleted; R2 keeps everything.
+**Archive:** at 00:30 UTC, compact yesterday's `sent/` state-vector files into `spool/archive/states/YYYY-MM-DD.parquet` (one row per state vector, plus `batch_id`) and flight-list files into `spool/archive/flights/YYYY-MM-DD.parquet`, then delete those JSON files. At 01:00 UTC, `rclone copy` the archive to Cloudflare R2 `airspace-archive/<collector_id>/`. Local archives older than `ARCHIVE_RETENTION_DAYS` (30) are deleted, which keeps about 6 GB on the Pi's SD card; R2 keeps everything ([D6](11-tasks.md#decided-while-building)).
 
 **Spool-only mode:** `UPLOAD_ENABLED=false`, used from M0 before the server exists. When the server is live, set it to `true`; the uploader drains `pending/` (see [Catch-up](#catch-up-after-an-outage-or-the-m0-backlog)).
 
 **Config (env, documented in `.env.example`):**
-`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=90`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
+`COLLECTOR_ID`, `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`, `INGEST_URL`, `INGEST_API_KEY`, `CADENCE_SECONDS=90`, `SPOOL_DIR`, `UPLOAD_ENABLED=true`, `FLIGHT_LISTS_ENABLED=true`, `ARCHIVE_RETENTION_DAYS=30`, `RCLONE_REMOTE=r2:airspace-archive`. There is no other cadence or query configuration.
 
 ## P2 · Ingest
 
