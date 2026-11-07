@@ -1,0 +1,57 @@
+# Lint, type check, tests, the migration test and image builds on every PR and push
+# (docs/09-conventions.md#cicd). JS checks join when web/ exists.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy libs
+      - run: uv run pytest
+
+  migrations:
+    # Applies every migration to an empty pinned Timescale container, runs db/tests (including the
+    # compressed-chunk insert test, timescale/timescaledb#7672) and the ingest smoke test.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash infra/test-db.sh
+
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ingest, collector]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build for amd64 and arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service == 'ingest' && 'services/ingest/Dockerfile' || 'collector/Dockerfile' }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
