@@ -40,7 +40,7 @@ A live world map of aircraft, with predictions and an AI assistant on top. We co
 
 ## Status
 
-Week 0 of 8. The collector has been running since 2026-10-29 and the database is up on the cloud server. The [task list](docs/11-tasks.md) shows what exists and what is left.
+Week 0 of 8. The collector has been running since 2026-10-29, on a Raspberry Pi around the clock since 2026-11-07, and the database is up on the cloud server. The [task list](docs/11-tasks.md) shows what exists and what is left.
 
 ## Documentation
 
