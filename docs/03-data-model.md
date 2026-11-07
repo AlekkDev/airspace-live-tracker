@@ -178,7 +178,7 @@ Rules:
 - Inserts use `ON CONFLICT DO NOTHING`; re-uploading a batch is harmless.
 - Snapshots have different `snapshot_time` values (90 s apart) and never conflict.
 - Rows whose position did not change between snapshots are kept. Consumers that need distinct positions dedupe on `(icao24, time_position)`.
-- Older history than 90 days is read from the collector's Parquet archives with DuckDB, never re-inserted.
+- Older history than 90 days is read from the Parquet archives in R2 with DuckDB, never re-inserted.
 
 ### `raw.opensky_flights` (hypertable)
 
