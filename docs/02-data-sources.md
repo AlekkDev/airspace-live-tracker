@@ -14,6 +14,7 @@ Facts below were checked against the providers' documentation on 2026-10-29. If 
 
 - `GET https://opensky-network.org/api/states/all?extended=1` (whole world; `extended=1` adds `category`).
 - **Cadence:** one request every 90 s, 960 a day. This fits OpenSky's daily quota with a small margin for retries.
+- **Quota reset:** the quota does not reset at midnight. It resets every 24 h at about 16:10 UTC, 24 h after the account's first request on 2026-10-29 (measured from `X-Rate-Limit-Remaining` through 2026-11-08). At 4 credits per request, 24/7 collection uses 3,840 of 4,000, so a day with many retries can run out shortly before the reset.
 - **Headers:** `X-Rate-Limit-Remaining` (quota left) and, on HTTP 429, `X-Rate-Limit-Retry-After-Seconds`. Both go into the batch envelope.
 - **Response:** `{ "time": <unix s>, "states": [[...], ...] }`. Each state is a positional array:
 
