@@ -59,15 +59,18 @@ BEGIN
   END IF;
 END $$;
 
--- The compression policy compresses chunks older than 2 days and leaves recent ones alone
-SELECT decompress_chunk(c) FROM show_chunks('raw.state_vectors') c;
+-- The compression policy compresses chunks older than 2 days and leaves recent ones alone.
+-- The background scheduler is paused first, so it cannot compress the chunk between the
+-- decompress below and run_job (which would then fail with "already compressed").
+SELECT job_id AS compression_job FROM timescaledb_information.jobs
+WHERE proc_name = 'policy_compression' AND hypertable_schema = 'raw' AND hypertable_name = 'state_vectors'
+  AND config->>'compress_after' = '2 days' \gset
+SELECT alter_job(:compression_job, scheduled => false);
+SELECT decompress_chunk(c, if_compressed => true) FROM show_chunks('raw.state_vectors') c;
 SET ROLE ingest_writer;
 INSERT INTO raw.state_vectors (snapshot_time, icao24, batch_id)
 VALUES (now(), 'dddddd', '00000000-0000-7000-8000-000000000001');
 RESET ROLE;
-SELECT job_id AS compression_job FROM timescaledb_information.jobs
-WHERE proc_name = 'policy_compression' AND hypertable_schema = 'raw' AND hypertable_name = 'state_vectors'
-  AND config->>'compress_after' = '2 days' \gset
 CALL run_job(:compression_job);
 DO $$
 BEGIN
