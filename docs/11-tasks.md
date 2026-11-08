@@ -92,8 +92,8 @@ Q4–Q15 carry over the findings still open from the 2026-10-30 documentation re
 | M1.11 | Compression-policy migration, merged after the drain | A | ✅ | Applied on the VM 2026-11-05 (job 1005, every 12 h). First run compressed 5 days from 6.0 GB to 2.1 GB (2.9×, 69 B/row), lower than the ~10× estimated (Q16) |
 | M1.12 | Dagster webserver, daemon and code location (tailnet only) | A | ⬜ | |
 | M1.13 | Grafana provisioning; ops dashboards (rows/min, slot coverage, gaps), externally shared | A | ⬜ | |
-| M1.14 | `ci.yml`: ruff, mypy, pytest, ESLint, tsc, Vitest, migration test, multi-arch build | A | ⛔ | `ci.yml` written (Python checks, `infra/test-db.sh`, amd64 + arm64 builds of ingest and collector; JS checks join with `web/`). Blocked: GitHub does not start jobs while the repo owner's account is locked for billing |
-| M1.15 | `deploy.yml` and `infra/deploy.sh` (Tailscale, pull → migrate → up), GHCR | A | 🟡 | VM switched to a git checkout and `deploy.sh` tested there by hand (2026-11-07). The forced-command deploy key is on the VM. Left: the billing lock, a Tailscale OAuth client for `tag:ci`, the three Actions secrets, a first automatic deploy. Images build on the VM; GHCR deferred |
+| M1.14 | `ci.yml`: ruff, mypy, pytest, ESLint, tsc, Vitest, migration test, multi-arch build | A | ✅ | Green since 2026-11-08 in the `airspace-monitor` organization (the repo moved there because Actions would not start on the previous owner's account). Python checks, `infra/test-db.sh`, amd64 + arm64 builds of ingest and collector. JS checks join with `web/` |
+| M1.15 | `deploy.yml` and `infra/deploy.sh` (Tailscale, pull → migrate → up), GHCR | A | ✅ | Live since 2026-11-08: every merge to `main` runs CI, then deploys to the VM over Tailscale (first automatic deploy: PR #12). Images build on the VM; GHCR deferred |
 | M1.16 | Daily `backup` job to R2; restore drill | A | ⬜ | |
 | M1.17 | Local dev command with the fixture database | A | ⬜ | |
 | M1.18 | OurAirports seed loader `db/seeds/ourairports.py` (`ref.airports`, `ref.runways`) | A | ⬜ | D2 |
