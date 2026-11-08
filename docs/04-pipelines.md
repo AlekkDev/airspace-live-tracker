@@ -207,7 +207,7 @@ A gap is a run of ≥ 4 consecutive slots (`requested_at` on the 90 s grid) with
 | `aircraft_count_range` | Latest snapshot has 3,000–20,000 states | fail outside |
 | `physical_bounds` | Rows with altitude ∉ [−500, 20,000] m or velocity > 400 m/s | warn > 0.1% |
 | `staleness` | Median `snapshot_time − last_contact` | warn > 30 s |
-| `credits_remaining` | Projected quota left at 00:00 UTC at the current rate | warn < 0 |
+| `credits_remaining` | Projected quota left at the next reset at the current rate. The reset time is taken from the data: the last time `credits_remaining` jumped back up, plus 24 h (about 16:10 UTC, [02](02-data-sources.md)) | warn < 0 |
 | `flight_lists_loaded` | Daily at 19:00: yesterday has 12 successful `flights_all` windows | fail otherwise |
 
 Grafana shows them as a traffic-light table. Every `fail` also inserts a `dq_fail` event.
