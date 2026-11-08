@@ -18,6 +18,7 @@ services:
       GRAFANA_READER_PASSWORD: ${GRAFANA_READER_PASSWORD:?}
       DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:?}
       MLFLOW_DB_PASSWORD: ${MLFLOW_DB_PASSWORD:?}
+      BACKUP_PASSWORD: ${BACKUP_PASSWORD:?}
       TS_TUNE_MEMORY: 4GB
       TS_TUNE_NUM_CPUS: "2"
       TIMESCALEDB_TELEMETRY: "off"
@@ -81,8 +82,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment: &dagster-env
+    environment:
       DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:?}
+      # Runs execute here, so job settings live on this service only.
+      BACKUP_PASSWORD: ${BACKUP_PASSWORD:?}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-airspace-backup}
+      ARCHIVE_BUCKET: ${ARCHIVE_BUCKET:-airspace-archive}
+      # rclone remote `r2` (docs/01-architecture.md#backups). infra/test-db.sh swaps in a local one.
+      RCLONE_CONFIG_R2_TYPE: ${R2_RCLONE_TYPE:-s3}
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ENDPOINT: https://${R2_ACCOUNT_ID:-unset}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+    volumes: &dagster-volumes
+      - dagster-storage:/opt/dagster/home/storage
     command: ["dagster", "code-server", "start", "-h", "0.0.0.0", "-p", "4000", "-m", "orchestrator.definitions", "--location-name", "airspace"]
     healthcheck:
       test: ["CMD", "dagster", "api", "grpc-health-check", "-p", "4000"]
@@ -98,7 +111,9 @@ services:
     depends_on:
       dagster-code:
         condition: service_healthy
-    environment: *dagster-env
+    environment: &dagster-env
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:?}
+    volumes: *dagster-volumes
     command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
     ports:
       # Local only. `tailscale serve` exposes it to the tailnet (docs/01-architecture.md).
@@ -118,7 +133,9 @@ services:
       dagster-code:
         condition: service_healthy
     environment: *dagster-env
+    volumes: *dagster-volumes
     command: ["dagster-daemon", "run", "-w", "workspace.yaml"]
 
 volumes:
   db-data:
+  dagster-storage:

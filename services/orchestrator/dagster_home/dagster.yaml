@@ -6,6 +6,9 @@ storage:
       hostname: db
       port: 5432
       db_name: dagster
+      # SQLAlchemy 2.1 maps plain postgresql:// to psycopg 3, which breaks dagster-postgres's
+      # NOTIFY; it is written for psycopg2 (installed as its dependency).
+      scheme: postgresql+psycopg2
       username: dagster
       password:
         env: DAGSTER_DB_PASSWORD

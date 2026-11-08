@@ -118,16 +118,16 @@ VM
 | Rate limits | Cloudflare rate-limiting rule on `api.<domain>/api/v1/*`: 60 requests per 10 s per IP. Chat limits in public-api ([05](05-api-contract.md#post-chat)). Anthropic console spend limit $40/month |
 | Grafana | Anonymous access disabled. Public dashboards are *externally shared dashboards*, which run only their own saved queries. `grafana_reader` sees views without key hashes and has a 10 s statement timeout |
 | Dagster, MLflow | Not routed by Caddy; reachable only on the tailnet |
-| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `DEPLOY_SSH_KEY`, and later the Anthropic key for the eval. The collector's `.env`: its OpenSky client, ingest key and R2 credentials |
+| Secrets | VM `.env` (not in git): DB role passwords (including `BACKUP_PASSWORD`), Anthropic key, Grafana admin password, R2 credentials (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`). GitHub Actions secrets: `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `DEPLOY_SSH_KEY`, and later the Anthropic key for the eval. The collector's `.env`: its OpenSky client, ingest key and R2 credentials |
 
 ## Backups
 
-Daily `backup` job ([04](04-pipelines.md#backup)) to Cloudflare R2 `airspace-backup/`, 14 days kept:
+Daily `backup` Dagster job ([04](04-pipelines.md#backup)) to Cloudflare R2 `airspace-backup/`, 14 days kept, as the read-only `backup` role ([D8](11-tasks.md#decided-while-building)):
 - `airspace` without the raw hypertables' chunk data (raw data is restored from the archives),
 - `dagster` and `mlflow`,
 - the `mlflow-artifacts` volume.
 
-The collector copies its Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of the collector device.
+The collector copies its Parquet archives to R2 `airspace-archive/` daily, so raw data survives the loss of the collector device. Backups and archives together stay under 8 GB, inside R2's free tier: the backup job deletes the oldest archive files above that ([D7](11-tasks.md#decided-while-building)).
 
 ## Sizing
 
@@ -147,7 +147,7 @@ Rows, bytes per row and compression are measured on the VM; "everything else" is
 | Item | Cost |
 |---|---|
 | Oracle VM | €0 (fallback Contabo: ~€5) |
-| Cloudflare R2 (archives ~40 GB + backups) | €0–2 |
+| Cloudflare R2 (archives + backups, capped at 8 GB, [D7](11-tasks.md#decided-while-building)) | €0 |
 | Claude API (Haiku; briefing ~$1.50, chat ~$0.005/question, capped) | $2–8 typical, ≤ $40 hard limit |
 | Domain | ~€1 |
 | Cloudflare DNS/Pages, GitHub, GHCR, Tailscale | €0 |

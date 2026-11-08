@@ -6,4 +6,6 @@ milestone builds them.
 
 from dagster import Definitions
 
-defs = Definitions()
+from orchestrator.backup import backup, backup_schedule
+
+defs = Definitions(jobs=[backup], schedules=[backup_schedule])

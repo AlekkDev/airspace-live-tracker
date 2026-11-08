@@ -450,5 +450,4 @@ The chat may only query views named `llm.v_*`. Each view is documented in `db/ll
 | `app_reader` | public-api | SELECT on `raw`, `ref`, `core`, `agg`, `ml`, `llm`, `ops.v_collectors`, `ops.v_ingest_batches`, `ops.dq_results`; INSERT on `llm.chat_log` |
 | `llm_readonly` | public-api chat path | SELECT on `llm.v_*` only; `default_transaction_read_only = on`; `statement_timeout = 5s` (also set per transaction, [07](07-llm.md#guardrails)) |
 | `grafana_reader` | Grafana | SELECT on `ops.v_collectors`, `ops.v_ingest_batches`, `ops.job_runs`, `ops.dq_results`, `ops.model_runs`, `agg`, `core.events`; `statement_timeout = 10s` |
-
-The backup job runs `pg_dump` as the `postgres` superuser inside the database container.
+| `backup` | backup job (dagster-code) | `pg_read_all_data`: reads every database, writes nothing ([D8](11-tasks.md#decided-while-building)) |

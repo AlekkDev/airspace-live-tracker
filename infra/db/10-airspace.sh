@@ -13,7 +13,7 @@ psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -v llm_pw="$LLM_READONLY_PASSWORD" \
   -v grafana_pw="$GRAFANA_READER_PASSWORD" \
   -v dagster_pw="$DAGSTER_DB_PASSWORD" \
-  -v mlflow_pw="$MLFLOW_DB_PASSWORD" <<'SQL'
+  -v mlflow_pw="$MLFLOW_DB_PASSWORD"   -v backup_pw="$BACKUP_PASSWORD" <<'SQL'
 CREATE ROLE airspace_owner LOGIN PASSWORD :'owner_pw';
 CREATE ROLE ingest_writer  LOGIN PASSWORD :'ingest_pw';
 CREATE ROLE stream_worker  LOGIN PASSWORD :'stream_pw';
@@ -23,6 +23,9 @@ CREATE ROLE llm_readonly   LOGIN PASSWORD :'llm_pw';
 CREATE ROLE grafana_reader LOGIN PASSWORD :'grafana_pw';
 CREATE ROLE dagster        LOGIN PASSWORD :'dagster_pw';
 CREATE ROLE mlflow         LOGIN PASSWORD :'mlflow_pw';
+-- pg_dump for the backup job: reads every database, changes nothing.
+CREATE ROLE backup         LOGIN PASSWORD :'backup_pw';
+GRANT pg_read_all_data TO backup;
 
 ALTER ROLE llm_readonly SET default_transaction_read_only = on;
 ALTER ROLE llm_readonly SET statement_timeout = '5s';

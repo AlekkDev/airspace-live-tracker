@@ -79,7 +79,7 @@ These live in `libs/airspace_common` and are used by every pipeline and by model
 
 **Status:** `uv run -m collector status` prints the pending file count and size and the newest batches.
 
-**Archive:** at 00:30 UTC, compact yesterday's `sent/` state-vector files into `spool/archive/states/YYYY-MM-DD.parquet` (one row per state vector, plus `batch_id`) and flight-list files into `spool/archive/flights/YYYY-MM-DD.parquet`, then delete those JSON files. At 01:00 UTC, `rclone copy` the archive to Cloudflare R2 `airspace-archive/<collector_id>/`. Local archives older than `ARCHIVE_RETENTION_DAYS` (30) are deleted, which keeps about 6 GB on the Pi's SD card; R2 keeps everything ([D6](11-tasks.md#decided-while-building)).
+**Archive:** at 00:30 UTC, compact yesterday's `sent/` state-vector files into `spool/archive/states/YYYY-MM-DD.parquet` (one row per state vector, plus `batch_id`) and flight-list files into `spool/archive/flights/YYYY-MM-DD.parquet`, then delete those JSON files. At 01:00 UTC, `rclone copy` the archive to Cloudflare R2 `airspace-archive/<collector_id>/`. Local archives older than `ARCHIVE_RETENTION_DAYS` (30) are deleted, which keeps about 6 GB on the Pi's SD card ([D6](11-tasks.md#decided-while-building)). R2 keeps archives until the 8 GB cap, about 5 weeks ([D7](11-tasks.md#decided-while-building)).
 
 **Spool-only mode:** `UPLOAD_ENABLED=false`, used from M0 before the server exists. When the server is live, set it to `true`; the uploader drains `pending/` (see [Catch-up](#catch-up-after-an-outage-or-the-m0-backlog)).
 
@@ -175,9 +175,12 @@ A gap is a run of ≥ 4 consecutive slots (`requested_at` on the 90 s grid) with
 
 ### `backup`
 
-1. `pg_dump -Fc airspace` excluding the data of the chunk tables of `raw.state_vectors` and `raw.opensky_flights` (the script looks up their `_timescaledb_internal` chunk and compressed-chunk table names from `timescaledb_information.chunks` and passes each as `--exclude-table-data`). Everything else, including continuous-aggregate data, is dumped.
+1. `pg_dump -Fc airspace` excluding the data of the chunk tables of `raw.state_vectors` and `raw.opensky_flights`: one `--exclude-table-data=_timescaledb_internal._hyper_<id>_*` pattern per hypertable, built from its chunk prefix in TimescaleDB's catalog. The pattern also covers the `<chunk>_compressed` tables, which TimescaleDB 2.30 no longer lists in its catalog. Everything else, including continuous-aggregate data, is dumped.
 2. `pg_dump -Fc dagster` and `pg_dump -Fc mlflow`.
-3. `rclone copy` the three dumps and the `mlflow-artifacts` volume to R2 `airspace-backup/YYYY-MM-DD/`. Keep the 14 newest days.
+3. `rclone copy` the three dumps (and, once MLflow exists, the `mlflow-artifacts` volume) to R2 `airspace-backup/YYYY-MM-DD/`. Keep the 14 newest days.
+4. **R2 cap ([D7](11-tasks.md#decided-while-building)):** if backups plus `airspace-archive` exceed 8 GB, delete the oldest archive files until they fit. Backups are never deleted for the cap.
+
+The job runs in the dagster-code container as the read-only `backup` role ([D8](11-tasks.md#decided-while-building)), with the PostgreSQL 16 client and rclone in the image. The rclone remote `r2` comes from `RCLONE_CONFIG_R2_*` variables set in `infra/compose.yml`. CI runs it against a local directory and restores the dump into a new database (`infra/test-db.sh`).
 
 **Restore:** create the databases, `SELECT timescaledb_pre_restore();`, `pg_restore`, `SELECT timescaledb_post_restore();`, then replay the collector's R2 archives with `collector.replay` ([below](#idempotency-and-replays)). Do not refresh the continuous aggregate before the raw data is back.
 

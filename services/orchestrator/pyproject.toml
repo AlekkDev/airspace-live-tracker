@@ -8,7 +8,7 @@ dependencies = [
   "dagster==1.13.29",
   "dagster-postgres==0.29.29",
   "dagster-webserver==1.13.29",
-  # dagster-postgres connects through psycopg 3 but does not declare it.
+  # The backup job queries the catalog directly (Dagster itself uses psycopg2).
   "psycopg[binary]>=3.2",
 ]
 

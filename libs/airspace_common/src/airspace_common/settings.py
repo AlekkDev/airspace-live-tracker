@@ -53,3 +53,19 @@ class AdminSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     admin_database_url: SecretStr
+
+
+class BackupSettings(BaseSettings):
+    """The `backup` job (docs/04-pipelines.md#backup), connecting as the read-only `backup` role.
+    The rclone remote itself is configured by `RCLONE_CONFIG_<REMOTE>_*` variables."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    backup_password: SecretStr
+    backup_db_host: str = "db"
+    backup_remote: str = "r2"
+    backup_bucket: str = "airspace-backup"
+    archive_bucket: str = "airspace-archive"
+    backup_keep_days: int = 14
+    # D7: backups plus archives stay under this, below R2's 10 GB free tier.
+    r2_cap_bytes: int = 8_000_000_000
