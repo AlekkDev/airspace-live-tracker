@@ -55,7 +55,7 @@ airspace-live-tracker/
 |---|---|---|
 | `ci.yml` | every PR and push | ruff, mypy, pytest; ESLint, tsc, Vitest; migration test (apply all migrations to an empty pinned Timescale container, then run the compressed-chunk insert test); Docker build for both architectures |
 | `llm-eval.yml` | PRs touching `services/llm/**`, `db/llm_views.md`, `db/migrations/**`, `db/seeds/fixture/**` | Golden-set eval and briefing number check against the fixture DB ([07](07-llm.md#3--evaluation-ci)) |
-| `deploy.yml` | push to `main` | Build and push multi-arch images, deploy over Tailscale ([01](01-architecture.md#deployment)) |
+| `deploy.yml` | `ci.yml` passed on `main`, or by hand | Join the tailnet and run `infra/deploy.sh` on the VM ([01](01-architecture.md#deployment)) |
 
 Model training runs only in Dagster on the server, never in GitHub Actions.
 

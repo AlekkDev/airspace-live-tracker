@@ -1,0 +1,44 @@
+# Deploys main to the VM after CI passes (docs/01-architecture.md#deployment).
+# The runner joins the tailnet as an ephemeral tag:ci node and SSHes to the VM with a key that can
+# only run infra/deploy.sh (a forced command in the VM's authorized_keys).
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VM_HOST: 100.80.31.53
+  # Public host key of the VM, so the runner refuses any other machine.
+  VM_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMMRObqfKMYEjKD4OBzUOE4TWhV3gI2UwbezQ8CS4gOX
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+      - name: Run infra/deploy.sh on the VM
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          echo "$VM_HOST $VM_HOST_KEY" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy -o BatchMode=yes -o IdentitiesOnly=yes "ubuntu@$VM_HOST"

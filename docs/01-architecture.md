@@ -93,11 +93,13 @@ VM
 
 ## Deployment
 
-- **Images:** GitHub Actions builds every service for `linux/amd64` and `linux/arm64` with Buildx and pushes to GHCR (`ghcr.io/<org>/airspace-<service>`).
-- **Deploy** (on merge to `main`, `deploy.yml`):
-  1. The runner joins the tailnet with `tailscale/github-action` (ephemeral node, OAuth client from Actions secrets).
-  2. It SSHes to the VM's tailnet name and runs `infra/deploy.sh`.
-  3. `deploy.sh` runs `docker compose pull`, then `docker compose run --rm migrate`, then `docker compose up -d`.
+- **Images:** CI (`ci.yml`) builds every image for `linux/amd64` and `linux/arm64` with Buildx to prove it builds. For now the VM builds its own images from the checkout; pushing to GHCR (`ghcr.io/<org>/airspace-<service>`) comes later if build times or rollbacks need it.
+- **The VM runs a git checkout of `main`** in `/home/ubuntu/airspace` (since 2026-11-07), with `infra/.env` beside it (not in git).
+- **Deploy** (`deploy.yml`, after `ci.yml` passes on `main`, or started by hand):
+  1. The runner joins the tailnet with `tailscale/github-action` as an ephemeral `tag:ci` node (OAuth client from Actions secrets).
+  2. It SSHes to the VM with a deploy key that can only run `infra/deploy.sh` (a forced command in `authorized_keys`), checking the VM's pinned host key.
+  3. `deploy.sh` refuses to run over local edits, fast-forwards to `origin/main`, pulls the pinned third-party images, builds ours, runs `docker compose run --rm migrate`, then `docker compose up -d --wait`.
+  - A team member can run `infra/deploy.sh` on the VM by hand; it does the same.
   - Migrations run **before** the new code starts, so every migration must work with the code that is still running (add columns and tables first, remove them in a later release).
 - **Frontend:** Cloudflare Pages builds `web/` on every push; PRs get preview URLs.
 
@@ -116,7 +118,7 @@ VM
 | Rate limits | Cloudflare rate-limiting rule on `api.<domain>/api/v1/*`: 60 requests per 10 s per IP. Chat limits in public-api ([05](05-api-contract.md#post-chat)). Anthropic console spend limit $40/month |
 | Grafana | Anonymous access disabled. Public dashboards are *externally shared dashboards*, which run only their own saved queries. `grafana_reader` sees views without key hashes and has a 10 s statement timeout |
 | Dagster, MLflow | Not routed by Caddy; reachable only on the tailnet |
-| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: Tailscale OAuth client, deploy SSH key, GHCR token, Anthropic key for the eval. The collector's `.env`: its OpenSky client, ingest key and R2 credentials |
+| Secrets | VM `.env` (not in git): DB role passwords, Anthropic key, Grafana admin password, rclone R2 credentials. GitHub Actions secrets: `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, `DEPLOY_SSH_KEY`, and later the Anthropic key for the eval. The collector's `.env`: its OpenSky client, ingest key and R2 credentials |
 
 ## Backups
 
