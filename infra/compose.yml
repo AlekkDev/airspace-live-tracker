@@ -70,5 +70,55 @@ services:
       ADMIN_DATABASE_URL: postgres://airspace_owner:${AIRSPACE_OWNER_PASSWORD:?}@db:5432/airspace?sslmode=disable
     entrypoint: ["python", "-m", "ingest.admin"]
 
+  # P4 orchestrator (docs/01-architecture.md#deployment). One image, three processes; instance
+  # config in services/orchestrator/dagster_home. Runs execute inside dagster-code.
+  dagster-code:
+    image: airspace-orchestrator:local
+    build: &dagster-build
+      context: ..
+      dockerfile: services/orchestrator/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &dagster-env
+      DAGSTER_DB_PASSWORD: ${DAGSTER_DB_PASSWORD:?}
+    command: ["dagster", "code-server", "start", "-h", "0.0.0.0", "-p", "4000", "-m", "orchestrator.definitions", "--location-name", "airspace"]
+    healthcheck:
+      test: ["CMD", "dagster", "api", "grpc-health-check", "-p", "4000"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  dagster-webserver:
+    image: airspace-orchestrator:local
+    build: *dagster-build
+    restart: unless-stopped
+    depends_on:
+      dagster-code:
+        condition: service_healthy
+    environment: *dagster-env
+    command: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
+    ports:
+      # Local only. `tailscale serve` exposes it to the tailnet (docs/01-architecture.md).
+      - "127.0.0.1:${DAGSTER_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:3000/server_info', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  dagster-daemon:
+    image: airspace-orchestrator:local
+    build: *dagster-build
+    restart: unless-stopped
+    depends_on:
+      dagster-code:
+        condition: service_healthy
+    environment: *dagster-env
+    command: ["dagster-daemon", "run", "-w", "workspace.yaml"]
+
 volumes:
   db-data:

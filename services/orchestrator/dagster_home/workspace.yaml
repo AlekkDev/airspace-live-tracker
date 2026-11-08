@@ -1,0 +1,6 @@
+# The webserver and the daemon load code from the dagster-code container over gRPC.
+load_from:
+  - grpc_server:
+      host: dagster-code
+      port: 4000
+      location_name: airspace
