@@ -8,6 +8,7 @@ for var in POSTGRES AIRSPACE_OWNER INGEST_WRITER STREAM_WORKER JOBS APP_READER L
   echo "${var}_PASSWORD=test" >> "$env_file"
 done
 echo "INGEST_HOST_PORT=18000" >> "$env_file"  # the real ingest-api may be using 8000
+echo "DAGSTER_HOST_PORT=13000" >> "$env_file"
 dc() { docker compose -p airspace-test --env-file "$env_file" -f compose.yml "$@"; }
 cleanup() { dc --profile tools down -v --remove-orphans >/dev/null 2>&1; rm -f "$env_file"; }
 trap cleanup EXIT
@@ -22,3 +23,8 @@ dc build ingest-api
 dc up -d --wait ingest-api
 key=$(dc run --rm -T ingest-admin add-collector --id smoke-01 --owner test --offset 0)
 dc exec -T -e COLLECTOR_KEY="$key" ingest-api python - < ../db/tests/ingest_smoke.py
+
+# Dagster: the webserver loads the `airspace` code location from dagster-code.
+dc build dagster-code
+dc up -d --wait dagster-code dagster-webserver dagster-daemon
+dc exec -T dagster-webserver python - < ../services/orchestrator/tests/smoke_webserver.py

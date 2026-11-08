@@ -1,0 +1,31 @@
+# Dagster instance config, shared by dagster-webserver, dagster-daemon and dagster-code.
+# Run storage, event log and schedules live in the `dagster` database (docs/03-data-model.md).
+storage:
+  postgres:
+    postgres_db:
+      hostname: db
+      port: 5432
+      db_name: dagster
+      username: dagster
+      password:
+        env: DAGSTER_DB_PASSWORD
+      params:
+        sslmode: disable
+
+# Runs are queued by the daemon and start as subprocesses of the dagster-code container
+# (the default run launcher).
+concurrency:
+  runs:
+    max_concurrent_runs: 2
+
+retention:
+  schedule:
+    purge_after_days: 30
+  sensor:
+    purge_after_days:
+      skipped: 7
+      failure: 30
+      success: -1
+
+telemetry:
+  enabled: false
